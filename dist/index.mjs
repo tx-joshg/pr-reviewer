@@ -44628,19 +44628,28 @@ async function autoFixSuggestions(apiKey, model, suggestions, token) {
   }
   const client = new openai_default({ apiKey });
   let filesChanged = 0;
+  const MAX_FILE_LINES = 200;
+  const MAX_LINE_LOSS_PERCENT = 5;
   for (const [filePath, findings] of fileGroups) {
     try {
       const originalContent = await readFile(filePath, "utf-8");
+      const originalLines = originalContent.split("\n").length;
+      if (originalLines > MAX_FILE_LINES) {
+        core.info(
+          `Skipping auto-fix for ${filePath} (${originalLines} lines exceeds ${MAX_FILE_LINES} limit \u2014 too risky for full-file replacement)`
+        );
+        continue;
+      }
       const fixDescriptions = findings.map(
         (finding) => `- [${finding.id}] ${finding.title} (line ~${finding.line ?? "unknown"}): ${finding.suggested_fix}`
       ).join("\n");
       const response = await client.chat.completions.create({
         model,
-        max_tokens: 4096,
+        max_tokens: 8192,
         messages: [
           {
             role: "system",
-            content: "You are a code fixer. Apply the requested fixes to the file content. Return ONLY the complete fixed file content with no explanation, no markdown fences, no commentary. Preserve all existing code that is not being fixed."
+            content: "You are a code fixer. Apply ONLY the requested fixes to the file content. Return ONLY the complete fixed file content with no explanation, no markdown fences, no commentary. Do NOT add comments, do NOT remove any code that is not part of the fix, do NOT restructure or reformat the file. The output must have the same number of lines (plus or minus a few for the fix itself)."
           },
           {
             role: "user",
@@ -44648,7 +44657,7 @@ async function autoFixSuggestions(apiKey, model, suggestions, token) {
 
 ${fixDescriptions}
 
-Original file content:
+Original file content (${originalLines} lines \u2014 your output must preserve all of them):
 
 ${originalContent}`
           }
@@ -44664,10 +44673,18 @@ ${originalContent}`
           cleanContent = cleanContent.substring(firstNewline + 1, lastFence);
         }
       }
+      const fixedLines = cleanContent.split("\n").length;
+      const lossPercent = (originalLines - fixedLines) / originalLines * 100;
+      if (lossPercent > MAX_LINE_LOSS_PERCENT) {
+        core.warning(
+          `Rejecting auto-fix for ${filePath}: output lost ${lossPercent.toFixed(1)}% of lines (${originalLines} \u2192 ${fixedLines}). This likely indicates truncation.`
+        );
+        continue;
+      }
       if (cleanContent.trim() !== originalContent.trim()) {
         await writeFile(filePath, cleanContent);
         filesChanged++;
-        core.info(`Auto-fixed: ${filePath} (${findings.length} suggestions applied)`);
+        core.info(`Auto-fixed: ${filePath} (${findings.length} suggestions applied, ${originalLines} \u2192 ${fixedLines} lines)`);
       }
     } catch (error) {
       core.warning(`Failed to auto-fix ${filePath}: ${error}`);

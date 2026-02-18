@@ -40,9 +40,20 @@ export async function autoFixSuggestions(
   const client = new OpenAI({ apiKey });
   let filesChanged = 0;
 
+  const MAX_FILE_LINES = 200;
+  const MAX_LINE_LOSS_PERCENT = 5;
+
   for (const [filePath, findings] of fileGroups) {
     try {
       const originalContent = await readFile(filePath, 'utf-8');
+      const originalLines = originalContent.split('\n').length;
+
+      if (originalLines > MAX_FILE_LINES) {
+        core.info(
+          `Skipping auto-fix for ${filePath} (${originalLines} lines exceeds ${MAX_FILE_LINES} limit — too risky for full-file replacement)`
+        );
+        continue;
+      }
 
       const fixDescriptions = findings
         .map(
@@ -53,16 +64,16 @@ export async function autoFixSuggestions(
 
       const response = await client.chat.completions.create({
         model,
-        max_tokens: 4096,
+        max_tokens: 8192,
         messages: [
           {
             role: 'system',
             content:
-              'You are a code fixer. Apply the requested fixes to the file content. Return ONLY the complete fixed file content with no explanation, no markdown fences, no commentary. Preserve all existing code that is not being fixed.',
+              'You are a code fixer. Apply ONLY the requested fixes to the file content. Return ONLY the complete fixed file content with no explanation, no markdown fences, no commentary. Do NOT add comments, do NOT remove any code that is not part of the fix, do NOT restructure or reformat the file. The output must have the same number of lines (plus or minus a few for the fix itself).',
           },
           {
             role: 'user',
-            content: `Apply these fixes to the file:\n\n${fixDescriptions}\n\nOriginal file content:\n\n${originalContent}`,
+            content: `Apply these fixes to the file:\n\n${fixDescriptions}\n\nOriginal file content (${originalLines} lines — your output must preserve all of them):\n\n${originalContent}`,
           },
         ],
       });
@@ -79,10 +90,20 @@ export async function autoFixSuggestions(
         }
       }
 
+      const fixedLines = cleanContent.split('\n').length;
+      const lossPercent = ((originalLines - fixedLines) / originalLines) * 100;
+
+      if (lossPercent > MAX_LINE_LOSS_PERCENT) {
+        core.warning(
+          `Rejecting auto-fix for ${filePath}: output lost ${lossPercent.toFixed(1)}% of lines (${originalLines} → ${fixedLines}). This likely indicates truncation.`
+        );
+        continue;
+      }
+
       if (cleanContent.trim() !== originalContent.trim()) {
         await writeFile(filePath, cleanContent);
         filesChanged++;
-        core.info(`Auto-fixed: ${filePath} (${findings.length} suggestions applied)`);
+        core.info(`Auto-fixed: ${filePath} (${findings.length} suggestions applied, ${originalLines} → ${fixedLines} lines)`);
       }
     } catch (error) {
       core.warning(`Failed to auto-fix ${filePath}: ${error}`);
