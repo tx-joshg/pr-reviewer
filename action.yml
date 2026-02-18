@@ -1,0 +1,28 @@
+name: 'PR Reviewer'
+description: 'AI-powered senior developer PR review with auto-fix capabilities'
+inputs:
+  review_config:
+    description: 'Path to the review configuration file'
+    required: true
+    default: '.github/review-config.yml'
+  openai_api_key:
+    description: 'OpenAI API key'
+    required: true
+  github_token:
+    description: 'GitHub token with repo permissions'
+    required: true
+  database_url:
+    description: 'Read-only database URL (optional)'
+    required: false
+    default: ''
+  auto_fix:
+    description: 'Enable auto-fix for trivial issues'
+    required: false
+    default: 'true'
+  model:
+    description: 'OpenAI model to use for reviews'
+    required: false
+    default: 'gpt-4o'
+runs:
+  using: 'node20'
+  main: 'dist/index.mjs'

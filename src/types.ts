@@ -1,0 +1,71 @@
+export type Severity = 'blocking' | 'suggestion' | 'tech_debt';
+
+export interface ReviewFinding {
+  id: string;
+  title: string;
+  file: string;
+  line: number | null;
+  severity: Severity;
+  description: string;
+  suggested_fix: string | null;
+}
+
+export interface ReviewResult {
+  status: 'approved' | 'changes_requested';
+  summary: string;
+  findings: ReviewFinding[];
+}
+
+export interface ReviewConfig {
+  project_type: string;
+  language: string;
+  schema?: {
+    orm: string;
+    path: string;
+  };
+  multi_tenancy?: {
+    enabled: boolean;
+    scope_column: string;
+    check_description: string;
+  };
+  auth?: {
+    provider: string;
+    middleware_import: string;
+    protected_routes: string;
+    except: string[];
+  };
+  testing?: {
+    framework: string;
+    test_dir: string;
+    source_dirs: string[];
+  };
+  routes?: {
+    file: string;
+    data_access: string;
+  };
+}
+
+export interface PRDetails {
+  number: number;
+  title: string;
+  body: string;
+  diff: string;
+  files: PRFile[];
+  commits: PRCommit[];
+  base_branch: string;
+  head_branch: string;
+  head_sha: string;
+}
+
+export interface PRFile {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  patch: string | undefined;
+}
+
+export interface PRCommit {
+  sha: string;
+  message: string;
+}

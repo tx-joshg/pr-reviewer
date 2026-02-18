@@ -1,2 +1,340 @@
-# pr-reviewer
-AI-powered senior developer PR review with auto-fix capabilities
+# PR Reviewer
+
+AI-powered senior developer PR review with auto-fix capabilities. Uses OpenAI to perform a comprehensive code review on every pull request, automatically fixing trivial issues and creating GitHub Issues for tech debt.
+
+Works with **any project** — configure once and every PR gets reviewed automatically. Pairs with a local MCP server for a Cursor-based feedback loop.
+
+## Features
+
+- **Automated senior-dev review** on every PR (schema safety, auth, multi-tenancy, tests, docs, code quality, security, GUI patterns)
+- **Auto-fix trivial issues** — unused imports, formatting, simple type fixes are committed directly
+- **Tech debt tracking** — non-blocking issues are filed as GitHub Issues with `tech-debt` label
+- **Blocking checks** — critical issues (security, missing auth, tenant scope) block the PR until fixed
+- **Structured output** — review findings are machine-parseable for integration with MCP servers and Cursor
+- **Reusable** — one action repo, per-project config files
+
+## System Overview
+
+```
+PR opened/updated
+    │
+    ▼
+GitHub Action (this repo)
+    ├── Fetches PR diff, files, commits
+    ├── Loads project-specific review-config.yml
+    ├── Sends to OpenAI for structured review
+    ├── Auto-fixes trivial suggestions (Level 2)
+    ├── Creates GitHub Issues for tech debt
+    ├── Posts review (approve / request changes)
+    └── Sets commit status (pass / fail)
+    │
+    ▼ (if blocking issues found)
+    │
+Cursor + MCP Server (local)
+    ├── Fetches structured findings from PR
+    ├── Queries dev/prod database for context
+    ├── You fix the issues with AI assistance
+    └── Push → action re-runs → passes → merge
+```
+
+---
+
+## Quick Setup (5 minutes per project)
+
+### Step 1: Add the workflow file
+
+Create `.github/workflows/pr-review.yml` in your project:
+
+```yaml
+name: PR Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  statuses: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: tx-joshg/pr-reviewer@main
+        with:
+          review_config: .github/review-config.yml
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Step 2: Create the review config
+
+Create `.github/review-config.yml` with rules specific to your project. See [Config Examples](#config-examples) below for templates.
+
+### Step 3: Add the OpenAI secret
+
+In your GitHub repo: Settings > Secrets and variables > Actions > New repository secret:
+
+- Name: `OPENAI_API_KEY`
+- Value: your OpenAI API key
+
+The `GITHUB_TOKEN` is automatically provided by GitHub Actions — no setup needed.
+
+### Step 4: Configure branch protection
+
+In your GitHub repo: Settings > Branches > Add branch protection rule for `main`:
+
+- **Require status checks to pass before merging**: select `pr-review`
+- **Require pull request reviews before merging**: 1 approval minimum
+- **Do not allow bypassing the above settings**
+
+### Step 5 (optional): Set up the MCP server for Cursor
+
+To get the review feedback loop in Cursor, add the MCP server to your project. See [MCP Server Setup](#mcp-server-setup).
+
+---
+
+## Action Inputs
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `review_config` | Yes | `.github/review-config.yml` | Path to review config |
+| `openai_api_key` | Yes | — | OpenAI API key |
+| `github_token` | Yes | — | GitHub token with repo permissions |
+| `database_url` | No | — | Read-only database URL |
+| `auto_fix` | No | `true` | Enable auto-fix for trivial issues |
+| `model` | No | `gpt-4o` | OpenAI model to use |
+
+---
+
+## Finding Severities
+
+| Severity | Action | Examples |
+|----------|--------|----------|
+| **blocking** | Posts "Request Changes", fails status check | Security vulnerabilities, missing auth, missing tenant scope, breaking migrations, intent mismatch |
+| **suggestion** | Auto-fixed and committed (Level 2) | Unused imports, formatting, simple type improvements |
+| **tech_debt** | Creates a GitHub Issue, does not block | Missing tests, TODO comments, code duplication, documentation gaps |
+
+---
+
+## Config Examples
+
+### TypeScript + Express + Drizzle (multi-tenant SaaS)
+
+```yaml
+project_type: express-drizzle
+language: typescript
+
+schema:
+  orm: drizzle
+  path: shared/schema.ts
+
+multi_tenancy:
+  enabled: true
+  scope_column: companyId
+  check_description: "All storage methods and routes must filter by companyId"
+
+auth:
+  provider: clerk
+  middleware_import: "@clerk/express"
+  protected_routes: "/api/*"
+  except: ["/api/health", "/api/stripe/webhook"]
+
+testing:
+  framework: vitest
+  test_dir: tests/
+  source_dirs: [server/, client/src/, shared/]
+
+routes:
+  file: server/routes.ts
+  data_access: server/storage.ts
+```
+
+### Next.js + Prisma
+
+```yaml
+project_type: nextjs-prisma
+language: typescript
+
+schema:
+  orm: prisma
+  path: prisma/schema.prisma
+
+multi_tenancy:
+  enabled: false
+
+auth:
+  provider: next-auth
+  middleware_import: next-auth/react
+  protected_routes: "/api/*"
+  except: ["/api/auth"]
+
+testing:
+  framework: jest
+  test_dir: __tests__/
+  source_dirs: [src/, pages/, app/]
+
+routes:
+  file: app/api/
+  data_access: lib/db.ts
+```
+
+### Python + FastAPI + SQLAlchemy
+
+```yaml
+project_type: fastapi-sqlalchemy
+language: python
+
+schema:
+  orm: sqlalchemy
+  path: app/models/
+
+multi_tenancy:
+  enabled: true
+  scope_column: organization_id
+  check_description: "All queries must filter by organization_id"
+
+auth:
+  provider: custom-jwt
+  middleware_import: app.auth
+  protected_routes: "/api/v1/*"
+  except: ["/api/v1/health", "/api/v1/auth/login"]
+
+testing:
+  framework: pytest
+  test_dir: tests/
+  source_dirs: [app/]
+
+routes:
+  file: app/api/
+  data_access: app/crud/
+```
+
+### Minimal config (any project)
+
+The only required fields are `project_type` and `language`. Everything else is optional:
+
+```yaml
+project_type: generic
+language: typescript
+
+testing:
+  framework: vitest
+  test_dir: tests/
+  source_dirs: [src/]
+```
+
+---
+
+## MCP Server Setup
+
+The MCP server runs locally and bridges the automated GitHub review back into Cursor. It provides tools to fetch review findings, query databases, and inspect your schema.
+
+### 1. Install dependencies
+
+Add these to your project (if not already present):
+
+```bash
+npm install @modelcontextprotocol/sdk @octokit/rest pg
+```
+
+### 2. Copy the MCP server files
+
+Copy the `mcp-server/` directory from the reference implementation (see [actemore](https://github.com/tx-joshg/actemore) for an example):
+
+```
+mcp-server/
+  index.ts                # Entry point, registers tools, starts stdio transport
+  types.ts                # Shared TypeScript types
+  tools/
+    github-tools.ts       # get_review_findings, list_tech_debt_issues, re_request_review
+    database-tools.ts     # query_database, get_table_info
+    codebase-tools.ts     # get_drizzle_schema, check_test_coverage
+```
+
+### 3. Configure Cursor
+
+Create `.cursor/mcp.json` (add this file to `.gitignore` — it contains secrets):
+
+```json
+{
+  "mcpServers": {
+    "pr-reviewer": {
+      "command": "node",
+      "args": ["--import", "tsx/esm", "mcp-server/index.ts"],
+      "env": {
+        "GITHUB_TOKEN": "<personal access token with repo scope>",
+        "GITHUB_OWNER": "<your-github-username>",
+        "GITHUB_REPO": "<your-repo-name>",
+        "DATABASE_URL_DEV": "postgresql://user@localhost:5432/mydb",
+        "DATABASE_URL_PROD": "postgresql://readonly_user:pass@host:port/db"
+      }
+    }
+  }
+}
+```
+
+Commit a `.cursor/mcp.json.example` with placeholder values so other devs know what's needed.
+
+### 4. Add the Cursor rule
+
+Create `.cursor/rules/pr-review.mdc` to teach Cursor the review workflow. See the [actemore example](https://github.com/tx-joshg/actemore/blob/main/.cursor/rules/pr-review.mdc).
+
+### 5. Create a GitHub Personal Access Token
+
+Go to https://github.com/settings/tokens and create a token with `repo` scope. This is used by the MCP server to fetch PR reviews and create comments.
+
+### MCP Tools Available
+
+| Tool | Description |
+|------|-------------|
+| `get_review_findings(pr_number)` | Fetches structured review findings from a PR |
+| `list_tech_debt_issues(labels?)` | Lists open tech-debt issues created by the reviewer |
+| `re_request_review(pr_number)` | Posts a comment requesting re-review |
+| `query_database(sql, environment)` | Runs read-only SQL against dev or prod (5s timeout, 100 row limit) |
+| `get_table_info(table_name, environment?)` | Returns columns, indexes, constraints, row count |
+| `get_drizzle_schema()` | Reads and parses the Drizzle schema file |
+| `check_test_coverage(file_paths)` | Checks if source files have corresponding test files |
+
+---
+
+## Cursor Workflow
+
+Once everything is set up, the workflow looks like this:
+
+1. Push your branch and open a PR
+2. The GitHub Action automatically reviews it (1-2 minutes)
+3. If issues are found, open Cursor and say: **"Review PR #42"**
+4. Cursor uses the MCP tools to fetch findings and fix them
+5. Push the fixes — the action re-runs automatically
+6. When it passes, the PR is approved and ready to merge
+
+---
+
+## New Project Checklist
+
+When adding PR Reviewer to a new project:
+
+- [ ] Create `.github/workflows/pr-review.yml` (copy from Quick Setup above)
+- [ ] Create `.github/review-config.yml` (use a Config Example as starting point)
+- [ ] Add `OPENAI_API_KEY` as a GitHub repo secret
+- [ ] Set up branch protection on `main` (require `pr-review` status check)
+- [ ] (Optional) Copy `mcp-server/` directory and configure `.cursor/mcp.json`
+- [ ] (Optional) Add `.cursor/rules/pr-review.mdc` for the Cursor feedback loop
+- [ ] (Optional) Add `.cursor/mcp.json` to `.gitignore`, commit `.cursor/mcp.json.example`
+
+---
+
+## Development
+
+```bash
+npm install
+npm run build        # Bundle with esbuild to dist/
+npm run typecheck    # Type check without emitting
+```
+
+When making changes to the action, rebuild and commit `dist/index.mjs` — GitHub Actions runs the compiled bundle directly.
