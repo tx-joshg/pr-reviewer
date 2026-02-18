@@ -103,56 +103,65 @@ async function run(): Promise<void> {
 
     await ghClient.setCommitStatus(pr.head_sha, 'pending', 'Review in progress...');
 
-    core.info(`PR "${pr.title}" — ${pr.files.length} files changed, ${pr.commits.length} commits`);
+    try {
+      core.info(`PR "${pr.title}" — ${pr.files.length} files changed, ${pr.commits.length} commits`);
 
-    const result = await reviewer.review(pr, excludedFilenames);
+      const result = await reviewer.review(pr, excludedFilenames);
 
-    core.info(`Review complete: ${result.status} — ${result.findings.length} findings`);
+      core.info(`Review complete: ${result.status} — ${result.findings.length} findings`);
 
-    const blocking = result.findings.filter((finding) => finding.severity === 'blocking');
-    const suggestions = result.findings.filter((finding) => finding.severity === 'suggestion');
-    const techDebt = result.findings.filter((finding) => finding.severity === 'tech_debt');
+      const blocking = result.findings.filter((finding) => finding.severity === 'blocking');
+      const suggestions = result.findings.filter((finding) => finding.severity === 'suggestion');
+      const techDebt = result.findings.filter((finding) => finding.severity === 'tech_debt');
 
-    if (autoFixEnabled && !isAutoFix && suggestions.length > 0) {
-      core.info(`Attempting auto-fix for ${suggestions.length} suggestions...`);
-      const pushed = await autoFixSuggestions(openaiApiKey, model, suggestions, githubToken);
-      if (pushed) {
-        core.info('Auto-fix commit pushed — this will trigger a re-review');
-        await ghClient.setCommitStatus(
-          pr.head_sha,
-          'pending',
-          'Auto-fix applied, awaiting re-review'
-        );
-        return;
+      if (autoFixEnabled && !isAutoFix && suggestions.length > 0) {
+        core.info(`Attempting auto-fix for ${suggestions.length} suggestions...`);
+        const pushed = await autoFixSuggestions(openaiApiKey, model, suggestions, githubToken);
+        if (pushed) {
+          core.info('Auto-fix commit pushed — this will trigger a re-review');
+          await ghClient.setCommitStatus(
+            pr.head_sha,
+            'pending',
+            'Auto-fix applied, awaiting re-review'
+          );
+          return;
+        }
       }
-    }
 
-    for (const finding of techDebt) {
+      for (const finding of techDebt) {
+        try {
+          const issueNumber = await ghClient.createIssue(finding, prNumber);
+          core.info(`Created tech debt issue #${issueNumber}: ${finding.title}`);
+        } catch (error) {
+          core.warning(`Failed to create issue for ${finding.id}: ${error}`);
+        }
+      }
+
+      await ghClient.postReview(prNumber, result);
+
+      const statusState = blocking.length > 0 ? 'failure' : 'success';
+      const statusDesc =
+        blocking.length > 0
+          ? `${blocking.length} blocking issue(s) found`
+          : 'Review passed';
+
+      await ghClient.setCommitStatus(pr.head_sha, statusState, statusDesc);
+
+      core.info(`Posted review: ${result.status}`);
+      core.info(`  Blocking: ${blocking.length}`);
+      core.info(`  Suggestions: ${suggestions.length}`);
+      core.info(`  Tech debt: ${techDebt.length}`);
+
+      if (blocking.length > 0) {
+        core.setFailed(`PR review found ${blocking.length} blocking issue(s)`);
+      }
+    } catch (error) {
       try {
-        const issueNumber = await ghClient.createIssue(finding, prNumber);
-        core.info(`Created tech debt issue #${issueNumber}: ${finding.title}`);
-      } catch (error) {
-        core.warning(`Failed to create issue for ${finding.id}: ${error}`);
+        await ghClient.setCommitStatus(pr.head_sha, 'error', 'Review failed unexpectedly');
+      } catch (statusError) {
+        core.warning(`Failed to update commit status: ${statusError}`);
       }
-    }
-
-    await ghClient.postReview(prNumber, result);
-
-    const statusState = blocking.length > 0 ? 'failure' : 'success';
-    const statusDesc =
-      blocking.length > 0
-        ? `${blocking.length} blocking issue(s) found`
-        : 'Review passed';
-
-    await ghClient.setCommitStatus(pr.head_sha, statusState, statusDesc);
-
-    core.info(`Posted review: ${result.status}`);
-    core.info(`  Blocking: ${blocking.length}`);
-    core.info(`  Suggestions: ${suggestions.length}`);
-    core.info(`  Tech debt: ${techDebt.length}`);
-
-    if (blocking.length > 0) {
-      core.setFailed(`PR review found ${blocking.length} blocking issue(s)`);
+      throw error;
     }
   } catch (error) {
     core.setFailed(`PR review failed: ${error}`);
