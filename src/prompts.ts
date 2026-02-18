@@ -1,23 +1,5 @@
 import { ReviewConfig } from './types.js';
 
-function buildExcludePathsSection(config: ReviewConfig): string {
-  if (!config.exclude_paths || config.exclude_paths.length === 0) {
-    return '';
-  }
-
-  const entries = config.exclude_paths
-    .map((exclusion) => `- \`${exclusion.path}\` — ${exclusion.reason}`)
-    .join('\n');
-
-  return `## Excluded Paths
-
-The following paths are excluded from application-level checks (auth, multi-tenancy, business logic).
-Files in these directories may still be reviewed for syntax errors or security issues, but do NOT flag them for missing auth middleware, tenant scoping, or similar application-layer rules.
-
-${entries}
-`;
-}
-
 function buildConventionsSection(config: ReviewConfig): string {
   if (!config.conventions || config.conventions.length === 0) {
     return '';
@@ -46,13 +28,12 @@ function buildAppliesToNote(appliesTo: string[] | undefined): string {
 }
 
 export function buildSystemPrompt(config: ReviewConfig): string {
-  const excludePathsSection = buildExcludePathsSection(config);
   const conventionsSection = buildConventionsSection(config);
 
   return `You are a senior software engineer performing a thorough code review on a pull request.
 Your review must be rigorous, precise, and actionable — the same quality as a principal engineer reviewing production code.
 
-${excludePathsSection}${conventionsSection}## Universal Baseline Rules
+${conventionsSection}## Universal Baseline Rules
 
 These rules always apply, regardless of project-specific configuration:
 

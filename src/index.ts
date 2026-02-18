@@ -4,8 +4,35 @@ import { readFile } from 'fs/promises';
 import { parse as parseYaml } from 'yaml';
 import { GitHubClient } from './github.js';
 import { Reviewer } from './reviewer.js';
-import { ReviewConfig } from './types.js';
+import { ReviewConfig, ExcludePath, PRFile } from './types.js';
 import { isAutoFixCommit, autoFixSuggestions } from './auto-fixer.js';
+
+function isExcluded(filename: string, excludePaths: ExcludePath[]): boolean {
+  return excludePaths.some((exclusion) => filename.startsWith(exclusion.path));
+}
+
+function filterExcludedFiles(
+  files: PRFile[],
+  diff: string,
+  excludePaths: ExcludePath[]
+): { files: PRFile[]; diff: string } {
+  if (excludePaths.length === 0) {
+    return { files, diff };
+  }
+
+  const filteredFiles = files.filter((file) => !isExcluded(file.filename, excludePaths));
+
+  const diffSections = diff.split(/^(?=diff --git )/m);
+  const filteredDiff = diffSections
+    .filter((section) => {
+      const headerMatch = section.match(/^diff --git a\/(.+?) b\//);
+      if (!headerMatch) return true;
+      return !isExcluded(headerMatch[1], excludePaths);
+    })
+    .join('');
+
+  return { files: filteredFiles, diff: filteredDiff };
+}
 
 async function run(): Promise<void> {
   try {
@@ -32,6 +59,17 @@ async function run(): Promise<void> {
     await ghClient.ensureLabelsExist();
 
     const pr = await ghClient.getPRDetails(prNumber);
+
+    if (config.exclude_paths && config.exclude_paths.length > 0) {
+      const originalCount = pr.files.length;
+      const filtered = filterExcludedFiles(pr.files, pr.diff, config.exclude_paths);
+      pr.files = filtered.files;
+      pr.diff = filtered.diff;
+      const excludedCount = originalCount - pr.files.length;
+      if (excludedCount > 0) {
+        core.info(`Excluded ${excludedCount} file(s) matching exclude_paths from review`);
+      }
+    }
 
     const latestCommitMessage = pr.commits.at(-1)?.message ?? '';
     const isAutoFix = isAutoFixCommit(latestCommitMessage);

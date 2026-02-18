@@ -44387,19 +44387,6 @@ OpenAI.ContainerListResponsesPage = ContainerListResponsesPage;
 var openai_default = OpenAI;
 
 // src/prompts.ts
-function buildExcludePathsSection(config) {
-  if (!config.exclude_paths || config.exclude_paths.length === 0) {
-    return "";
-  }
-  const entries = config.exclude_paths.map((exclusion) => `- \`${exclusion.path}\` \u2014 ${exclusion.reason}`).join("\n");
-  return `## Excluded Paths
-
-The following paths are excluded from application-level checks (auth, multi-tenancy, business logic).
-Files in these directories may still be reviewed for syntax errors or security issues, but do NOT flag them for missing auth middleware, tenant scoping, or similar application-layer rules.
-
-${entries}
-`;
-}
 function buildConventionsSection(config) {
   if (!config.conventions || config.conventions.length === 0) {
     return "";
@@ -44422,12 +44409,11 @@ function buildAppliesToNote(appliesTo) {
 - **Scope:** Only apply these checks to files under ${paths}`;
 }
 function buildSystemPrompt(config) {
-  const excludePathsSection = buildExcludePathsSection(config);
   const conventionsSection = buildConventionsSection(config);
   return `You are a senior software engineer performing a thorough code review on a pull request.
 Your review must be rigorous, precise, and actionable \u2014 the same quality as a principal engineer reviewing production code.
 
-${excludePathsSection}${conventionsSection}## Universal Baseline Rules
+${conventionsSection}## Universal Baseline Rules
 
 These rules always apply, regardless of project-specific configuration:
 
@@ -44764,6 +44750,22 @@ Auto-fixed ${filesChanged} file(s) from PR #${prNumber} review"`
 }
 
 // src/index.ts
+function isExcluded(filename, excludePaths) {
+  return excludePaths.some((exclusion) => filename.startsWith(exclusion.path));
+}
+function filterExcludedFiles(files, diff, excludePaths) {
+  if (excludePaths.length === 0) {
+    return { files, diff };
+  }
+  const filteredFiles = files.filter((file) => !isExcluded(file.filename, excludePaths));
+  const diffSections = diff.split(/^(?=diff --git )/m);
+  const filteredDiff = diffSections.filter((section) => {
+    const headerMatch = section.match(/^diff --git a\/(.+?) b\//);
+    if (!headerMatch) return true;
+    return !isExcluded(headerMatch[1], excludePaths);
+  }).join("");
+  return { files: filteredFiles, diff: filteredDiff };
+}
 async function run() {
   try {
     const openaiApiKey = core2.getInput("openai_api_key", { required: true });
@@ -44783,6 +44785,16 @@ async function run() {
     const reviewer = new Reviewer(openaiApiKey, config, model);
     await ghClient.ensureLabelsExist();
     const pr2 = await ghClient.getPRDetails(prNumber);
+    if (config.exclude_paths && config.exclude_paths.length > 0) {
+      const originalCount = pr2.files.length;
+      const filtered = filterExcludedFiles(pr2.files, pr2.diff, config.exclude_paths);
+      pr2.files = filtered.files;
+      pr2.diff = filtered.diff;
+      const excludedCount = originalCount - pr2.files.length;
+      if (excludedCount > 0) {
+        core2.info(`Excluded ${excludedCount} file(s) matching exclude_paths from review`);
+      }
+    }
     const latestCommitMessage = pr2.commits.at(-1)?.message ?? "";
     const isAutoFix = isAutoFixCommit(latestCommitMessage);
     if (isAutoFix) {
