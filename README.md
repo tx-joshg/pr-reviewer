@@ -107,7 +107,7 @@ To get the review feedback loop in Cursor, add the MCP server to your project. S
 | `github_token` | Yes | — | GitHub token with repo permissions |
 | `database_url` | No | — | Read-only database URL |
 | `auto_fix` | No | `true` | Enable auto-fix for trivial issues |
-| `model` | No | `gpt-4o` | OpenAI model to use |
+| `model` | No | `gpt-5.2-codex` | OpenAI model to use |
 
 ---
 
