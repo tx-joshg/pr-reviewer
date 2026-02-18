@@ -71,9 +71,9 @@ export class Reviewer {
     this.model = model;
   }
 
-  async review(pr: PRDetails): Promise<ReviewResult> {
+  async review(pr: PRDetails, excludedFiles?: string[]): Promise<ReviewResult> {
     const systemPrompt = buildSystemPrompt(this.config);
-    const userMessage = buildUserMessage(pr.title, pr.body, pr.commits, pr.diff, pr.files);
+    const userMessage = buildUserMessage(pr.title, pr.body, pr.commits, pr.diff, pr.files, excludedFiles);
 
     const response = await this.client.responses.create({
       model: this.model,

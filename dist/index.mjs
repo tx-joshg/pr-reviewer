@@ -44515,9 +44515,15 @@ ${config.routes ? `- Routes: ${config.routes.file}
 - Set status to "approved" ONLY if there are zero blocking findings
 - Set status to "changes_requested" if there is at least one blocking finding`;
 }
-function buildUserMessage(title, body, commits, diff, files) {
+function buildUserMessage(title, body, commits, diff, files, excludedFiles) {
   const commitList = commits.map((commit) => `- ${commit.sha.substring(0, 7)}: ${commit.message}`).join("\n");
   const fileList = files.map((file) => `- ${file.filename} (${file.status}, +${file.additions}/-${file.deletions})`).join("\n");
+  const excludedSection = excludedFiles && excludedFiles.length > 0 ? `
+**Excluded from review (${excludedFiles.length} file${excludedFiles.length === 1 ? "" : "s"}):**
+${excludedFiles.map((file) => `- ${file}`).join("\n")}
+
+These files were excluded by the project config and are not shown in the diff. Do not flag missing coverage or context related to them.
+` : "";
   return `## Pull Request
 
 **Title:** ${title}
@@ -44530,7 +44536,7 @@ ${commitList}
 
 **Files Changed:**
 ${fileList}
-
+${excludedSection}
 ## Full Diff
 
 \`\`\`diff
@@ -44604,9 +44610,9 @@ var Reviewer = class {
     this.config = config;
     this.model = model;
   }
-  async review(pr2) {
+  async review(pr2, excludedFiles) {
     const systemPrompt = buildSystemPrompt(this.config);
-    const userMessage = buildUserMessage(pr2.title, pr2.body, pr2.commits, pr2.diff, pr2.files);
+    const userMessage = buildUserMessage(pr2.title, pr2.body, pr2.commits, pr2.diff, pr2.files, excludedFiles);
     const response = await this.client.responses.create({
       model: this.model,
       instructions: systemPrompt,
@@ -44744,16 +44750,23 @@ function isExcluded(filename, excludePaths) {
 }
 function filterExcludedFiles(files, diff, excludePaths) {
   if (excludePaths.length === 0) {
-    return { files, diff };
+    return { files, diff, excludedFilenames: [] };
   }
-  const filteredFiles = files.filter((file) => !isExcluded(file.filename, excludePaths));
+  const excludedFilenames = [];
+  const filteredFiles = files.filter((file) => {
+    if (isExcluded(file.filename, excludePaths)) {
+      excludedFilenames.push(file.filename);
+      return false;
+    }
+    return true;
+  });
   const diffSections = diff.split(/^(?=diff --git )/m);
   const filteredDiff = diffSections.filter((section) => {
     const headerMatch = section.match(/^diff --git a\/(.+?) b\//);
     if (!headerMatch) return true;
     return !isExcluded(headerMatch[1], excludePaths);
   }).join("");
-  return { files: filteredFiles, diff: filteredDiff };
+  return { files: filteredFiles, diff: filteredDiff, excludedFilenames };
 }
 async function run() {
   try {
@@ -44774,15 +44787,25 @@ async function run() {
     const reviewer = new Reviewer(openaiApiKey, config, model);
     await ghClient.ensureLabelsExist();
     const pr2 = await ghClient.getPRDetails(prNumber);
+    let excludedFilenames = [];
     if (config.exclude_paths && config.exclude_paths.length > 0) {
-      const originalCount = pr2.files.length;
       const filtered = filterExcludedFiles(pr2.files, pr2.diff, config.exclude_paths);
+      excludedFilenames = filtered.excludedFilenames;
       pr2.files = filtered.files;
       pr2.diff = filtered.diff;
-      const excludedCount = originalCount - pr2.files.length;
-      if (excludedCount > 0) {
-        core2.info(`Excluded ${excludedCount} file(s) matching exclude_paths from review`);
+      if (excludedFilenames.length > 0) {
+        core2.info(`Excluded ${excludedFilenames.length} file(s) matching exclude_paths from review`);
       }
+    }
+    if (pr2.files.length === 0) {
+      core2.info("All files in this PR are excluded from review \u2014 auto-approving");
+      await ghClient.postReview(prNumber, {
+        status: "approved",
+        summary: `All ${excludedFilenames.length} file(s) in this PR match exclude_paths and are exempt from application-level review. Auto-approved.`,
+        findings: []
+      });
+      await ghClient.setCommitStatus(pr2.head_sha, "success", "All files excluded \u2014 auto-approved");
+      return;
     }
     const latestCommitMessage = pr2.commits.at(-1)?.message ?? "";
     const isAutoFix = isAutoFixCommit(latestCommitMessage);
@@ -44791,7 +44814,7 @@ async function run() {
     }
     await ghClient.setCommitStatus(pr2.head_sha, "pending", "Review in progress...");
     core2.info(`PR "${pr2.title}" \u2014 ${pr2.files.length} files changed, ${pr2.commits.length} commits`);
-    const result = await reviewer.review(pr2);
+    const result = await reviewer.review(pr2, excludedFilenames);
     core2.info(`Review complete: ${result.status} \u2014 ${result.findings.length} findings`);
     const blocking = result.findings.filter((finding) => finding.severity === "blocking");
     const suggestions = result.findings.filter((finding) => finding.severity === "suggestion");

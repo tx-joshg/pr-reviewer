@@ -11,16 +11,29 @@ function isExcluded(filename: string, excludePaths: ExcludePath[]): boolean {
   return excludePaths.some((exclusion) => filename.startsWith(exclusion.path));
 }
 
+interface FilterResult {
+  files: PRFile[];
+  diff: string;
+  excludedFilenames: string[];
+}
+
 function filterExcludedFiles(
   files: PRFile[],
   diff: string,
   excludePaths: ExcludePath[]
-): { files: PRFile[]; diff: string } {
+): FilterResult {
   if (excludePaths.length === 0) {
-    return { files, diff };
+    return { files, diff, excludedFilenames: [] };
   }
 
-  const filteredFiles = files.filter((file) => !isExcluded(file.filename, excludePaths));
+  const excludedFilenames: string[] = [];
+  const filteredFiles = files.filter((file) => {
+    if (isExcluded(file.filename, excludePaths)) {
+      excludedFilenames.push(file.filename);
+      return false;
+    }
+    return true;
+  });
 
   const diffSections = diff.split(/^(?=diff --git )/m);
   const filteredDiff = diffSections
@@ -31,7 +44,7 @@ function filterExcludedFiles(
     })
     .join('');
 
-  return { files: filteredFiles, diff: filteredDiff };
+  return { files: filteredFiles, diff: filteredDiff, excludedFilenames };
 }
 
 async function run(): Promise<void> {
@@ -60,15 +73,26 @@ async function run(): Promise<void> {
 
     const pr = await ghClient.getPRDetails(prNumber);
 
+    let excludedFilenames: string[] = [];
     if (config.exclude_paths && config.exclude_paths.length > 0) {
-      const originalCount = pr.files.length;
       const filtered = filterExcludedFiles(pr.files, pr.diff, config.exclude_paths);
+      excludedFilenames = filtered.excludedFilenames;
       pr.files = filtered.files;
       pr.diff = filtered.diff;
-      const excludedCount = originalCount - pr.files.length;
-      if (excludedCount > 0) {
-        core.info(`Excluded ${excludedCount} file(s) matching exclude_paths from review`);
+      if (excludedFilenames.length > 0) {
+        core.info(`Excluded ${excludedFilenames.length} file(s) matching exclude_paths from review`);
       }
+    }
+
+    if (pr.files.length === 0) {
+      core.info('All files in this PR are excluded from review — auto-approving');
+      await ghClient.postReview(prNumber, {
+        status: 'approved',
+        summary: `All ${excludedFilenames.length} file(s) in this PR match exclude_paths and are exempt from application-level review. Auto-approved.`,
+        findings: [],
+      });
+      await ghClient.setCommitStatus(pr.head_sha, 'success', 'All files excluded — auto-approved');
+      return;
     }
 
     const latestCommitMessage = pr.commits.at(-1)?.message ?? '';
@@ -81,7 +105,7 @@ async function run(): Promise<void> {
 
     core.info(`PR "${pr.title}" — ${pr.files.length} files changed, ${pr.commits.length} commits`);
 
-    const result = await reviewer.review(pr);
+    const result = await reviewer.review(pr, excludedFilenames);
 
     core.info(`Review complete: ${result.status} — ${result.findings.length} findings`);
 

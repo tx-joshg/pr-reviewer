@@ -140,7 +140,8 @@ export function buildUserMessage(
   body: string,
   commits: Array<{ sha: string; message: string }>,
   diff: string,
-  files: Array<{ filename: string; status: string; additions: number; deletions: number }>
+  files: Array<{ filename: string; status: string; additions: number; deletions: number }>,
+  excludedFiles?: string[]
 ): string {
   const commitList = commits
     .map((commit) => `- ${commit.sha.substring(0, 7)}: ${commit.message}`)
@@ -149,6 +150,11 @@ export function buildUserMessage(
   const fileList = files
     .map((file) => `- ${file.filename} (${file.status}, +${file.additions}/-${file.deletions})`)
     .join('\n');
+
+  const excludedSection =
+    excludedFiles && excludedFiles.length > 0
+      ? `\n**Excluded from review (${excludedFiles.length} file${excludedFiles.length === 1 ? '' : 's'}):**\n${excludedFiles.map((file) => `- ${file}`).join('\n')}\n\nThese files were excluded by the project config and are not shown in the diff. Do not flag missing coverage or context related to them.\n`
+      : '';
 
   return `## Pull Request
 
@@ -162,7 +168,7 @@ ${commitList}
 
 **Files Changed:**
 ${fileList}
-
+${excludedSection}
 ## Full Diff
 
 \`\`\`diff
