@@ -19748,10 +19748,10 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("error", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports.error = error;
-    function warning3(message, properties = {}) {
+    function warning4(message, properties = {}) {
       (0, command_1.issueCommand)("warning", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
-    exports.warning = warning3;
+    exports.warning = warning4;
     function notice(message, properties = {}) {
       (0, command_1.issueCommand)("notice", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
@@ -25530,12 +25530,12 @@ var require_log = __commonJS({
       if (logLevel === "debug")
         console.log(...messages);
     }
-    function warn(logLevel, warning3) {
+    function warn(logLevel, warning4) {
       if (logLevel === "debug" || logLevel === "warn") {
         if (typeof node_process.emitWarning === "function")
-          node_process.emitWarning(warning3);
+          node_process.emitWarning(warning4);
         else
-          console.warn(warning3);
+          console.warn(warning4);
       }
     }
     exports.debug = debug2;
@@ -28988,9 +28988,9 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code, message, warning3) => {
+        this.onError = (source, code, message, warning4) => {
           const pos = getErrorPos(source);
-          if (warning3)
+          if (warning4)
             this.warnings.push(new errors.YAMLWarning(pos, code, message));
           else
             this.errors.push(new errors.YAMLParseError(pos, code, message));
@@ -29061,10 +29061,10 @@ ${cb}` : comment;
           console.dir(token, { depth: null });
         switch (token.type) {
           case "directive":
-            this.directives.add(token.source, (offset, message, warning3) => {
+            this.directives.add(token.source, (offset, message, warning4) => {
               const pos = getErrorPos(token);
               pos[0] += offset;
-              this.onError(pos, "BAD_DIRECTIVE", message, warning3);
+              this.onError(pos, "BAD_DIRECTIVE", message, warning4);
             });
             this.prelude.push(token.source);
             this.atDirectives = true;
@@ -31089,7 +31089,7 @@ var require_public_api = __commonJS({
       const doc = parseDocument(src, options);
       if (!doc)
         return null;
-      doc.warnings.forEach((warning3) => log.warn(doc.options.logLevel, warning3));
+      doc.warnings.forEach((warning4) => log.warn(doc.options.logLevel, warning4));
       if (doc.errors.length > 0) {
         if (doc.options.logLevel !== "silent")
           throw doc.errors[0];
@@ -37580,12 +37580,13 @@ var init_fileFromPath = __esm({
 });
 
 // src/index.ts
-var core2 = __toESM(require_core(), 1);
+var core3 = __toESM(require_core(), 1);
 var github3 = __toESM(require_github(), 1);
 var import_yaml = __toESM(require_dist(), 1);
 import { readFile as readFile2 } from "fs/promises";
 
 // src/github.ts
+var core = __toESM(require_core(), 1);
 var github = __toESM(require_github(), 1);
 
 // src/format.ts
@@ -37708,13 +37709,29 @@ var GitHubClient = class {
     const body = formatReviewComment(this.repo, prNumber, result);
     const event = result.status === "approved" ? "APPROVE" : "REQUEST_CHANGES";
     await this.deleteExistingReviews(prNumber);
-    await this.octokit.rest.pulls.createReview({
-      owner: this.owner,
-      repo: this.repo,
-      pull_number: prNumber,
-      body,
-      event
-    });
+    try {
+      await this.octokit.rest.pulls.createReview({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+        body,
+        event
+      });
+    } catch (error) {
+      if (event !== "APPROVE") {
+        throw error;
+      }
+      core.warning(
+        `Cannot submit APPROVE review (the token may lack permission or GitHub prevents self-approval). Falling back to COMMENT. Error: ${error}`
+      );
+      await this.octokit.rest.pulls.createReview({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+        body,
+        event: "COMMENT"
+      });
+    }
   }
   async createIssue(finding, prNumber) {
     const response = await this.octokit.rest.issues.create({
@@ -44636,7 +44653,7 @@ var Reviewer = class {
 };
 
 // src/auto-fixer.ts
-var core = __toESM(require_core(), 1);
+var core2 = __toESM(require_core(), 1);
 var github2 = __toESM(require_github(), 1);
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -44658,7 +44675,7 @@ async function autoFixSuggestions(apiKey, model, suggestions, token) {
     fileGroups.set(finding.file, existing);
   }
   if (fileGroups.size === 0) {
-    core.info("No suggestions with concrete fixes to auto-apply");
+    core2.info("No suggestions with concrete fixes to auto-apply");
     return false;
   }
   const client = new openai_default({ apiKey });
@@ -44670,7 +44687,7 @@ async function autoFixSuggestions(apiKey, model, suggestions, token) {
       const originalContent = await readFile(filePath, "utf-8");
       const originalLines = originalContent.split("\n").length;
       if (originalLines > MAX_FILE_LINES) {
-        core.info(
+        core2.info(
           `Skipping auto-fix for ${filePath} (${originalLines} lines exceeds ${MAX_FILE_LINES} limit \u2014 too risky for full-file replacement)`
         );
         continue;
@@ -44702,7 +44719,7 @@ ${originalContent}`
       const fixedLines = cleanContent.split("\n").length;
       const lossPercent = (originalLines - fixedLines) / originalLines * 100;
       if (lossPercent > MAX_LINE_LOSS_PERCENT) {
-        core.warning(
+        core2.warning(
           `Rejecting auto-fix for ${filePath}: output lost ${lossPercent.toFixed(1)}% of lines (${originalLines} \u2192 ${fixedLines}). This likely indicates truncation.`
         );
         continue;
@@ -44710,10 +44727,10 @@ ${originalContent}`
       if (cleanContent.trim() !== originalContent.trim()) {
         await writeFile(filePath, cleanContent);
         filesChanged++;
-        core.info(`Auto-fixed: ${filePath} (${findings.length} suggestions applied, ${originalLines} \u2192 ${fixedLines} lines)`);
+        core2.info(`Auto-fixed: ${filePath} (${findings.length} suggestions applied, ${originalLines} \u2192 ${fixedLines} lines)`);
       }
     } catch (error) {
-      core.warning(`Failed to auto-fix ${filePath}: ${error}`);
+      core2.warning(`Failed to auto-fix ${filePath}: ${error}`);
     }
   }
   if (filesChanged === 0) {
@@ -44723,7 +44740,7 @@ ${originalContent}`
     const prNumber = github2.context.payload.pull_request?.number;
     const headRef = github2.context.payload.pull_request?.head?.ref;
     if (!headRef) {
-      core.warning("Could not determine PR head branch for auto-fix push");
+      core2.warning("Could not determine PR head branch for auto-fix push");
       return false;
     }
     await execAsync('git config user.name "pr-reviewer[bot]"');
@@ -44736,10 +44753,10 @@ Auto-fixed ${filesChanged} file(s) from PR #${prNumber} review"`
     );
     const remote = `https://x-access-token:${token}@github.com/${github2.context.repo.owner}/${github2.context.repo.repo}.git`;
     await execAsync(`git push ${remote} HEAD:${headRef}`);
-    core.info(`Pushed auto-fix commit for ${filesChanged} files`);
+    core2.info(`Pushed auto-fix commit for ${filesChanged} files`);
     return true;
   } catch (error) {
-    core.warning(`Failed to push auto-fix commit: ${error}`);
+    core2.warning(`Failed to push auto-fix commit: ${error}`);
     return false;
   }
 }
@@ -44770,17 +44787,17 @@ function filterExcludedFiles(files, diff, excludePaths) {
 }
 async function run() {
   try {
-    const openaiApiKey = core2.getInput("openai_api_key", { required: true });
-    const githubToken = core2.getInput("github_token", { required: true });
-    const configPath = core2.getInput("review_config", { required: true });
-    const autoFixEnabled = core2.getInput("auto_fix") !== "false";
-    const model = core2.getInput("model");
+    const openaiApiKey = core3.getInput("openai_api_key", { required: true });
+    const githubToken = core3.getInput("github_token", { required: true });
+    const configPath = core3.getInput("review_config", { required: true });
+    const autoFixEnabled = core3.getInput("auto_fix") !== "false";
+    const model = core3.getInput("model");
     const prNumber = github3.context.payload.pull_request?.number;
     if (!prNumber) {
-      core2.setFailed("This action must be triggered by a pull_request event");
+      core3.setFailed("This action must be triggered by a pull_request event");
       return;
     }
-    core2.info(`Reviewing PR #${prNumber}...`);
+    core3.info(`Reviewing PR #${prNumber}...`);
     const configContent = await readFile2(configPath, "utf-8");
     const config = (0, import_yaml.parse)(configContent);
     const ghClient = new GitHubClient(githubToken);
@@ -44794,11 +44811,11 @@ async function run() {
       pr2.files = filtered.files;
       pr2.diff = filtered.diff;
       if (excludedFilenames.length > 0) {
-        core2.info(`Excluded ${excludedFilenames.length} file(s) matching exclude_paths from review`);
+        core3.info(`Excluded ${excludedFilenames.length} file(s) matching exclude_paths from review`);
       }
     }
     if (pr2.files.length === 0) {
-      core2.info("All files in this PR are excluded from review \u2014 auto-approving");
+      core3.info("All files in this PR are excluded from review \u2014 auto-approving");
       await ghClient.postReview(prNumber, {
         status: "approved",
         summary: `All ${excludedFilenames.length} file(s) in this PR match exclude_paths and are exempt from application-level review. Auto-approved.`,
@@ -44810,49 +44827,58 @@ async function run() {
     const latestCommitMessage = pr2.commits.at(-1)?.message ?? "";
     const isAutoFix = isAutoFixCommit(latestCommitMessage);
     if (isAutoFix) {
-      core2.info("Latest commit is an auto-fix \u2014 skipping auto-fix to prevent loops");
+      core3.info("Latest commit is an auto-fix \u2014 skipping auto-fix to prevent loops");
     }
     await ghClient.setCommitStatus(pr2.head_sha, "pending", "Review in progress...");
-    core2.info(`PR "${pr2.title}" \u2014 ${pr2.files.length} files changed, ${pr2.commits.length} commits`);
-    const result = await reviewer.review(pr2, excludedFilenames);
-    core2.info(`Review complete: ${result.status} \u2014 ${result.findings.length} findings`);
-    const blocking = result.findings.filter((finding) => finding.severity === "blocking");
-    const suggestions = result.findings.filter((finding) => finding.severity === "suggestion");
-    const techDebt = result.findings.filter((finding) => finding.severity === "tech_debt");
-    if (autoFixEnabled && !isAutoFix && suggestions.length > 0) {
-      core2.info(`Attempting auto-fix for ${suggestions.length} suggestions...`);
-      const pushed = await autoFixSuggestions(openaiApiKey, model, suggestions, githubToken);
-      if (pushed) {
-        core2.info("Auto-fix commit pushed \u2014 this will trigger a re-review");
-        await ghClient.setCommitStatus(
-          pr2.head_sha,
-          "pending",
-          "Auto-fix applied, awaiting re-review"
-        );
-        return;
+    try {
+      core3.info(`PR "${pr2.title}" \u2014 ${pr2.files.length} files changed, ${pr2.commits.length} commits`);
+      const result = await reviewer.review(pr2, excludedFilenames);
+      core3.info(`Review complete: ${result.status} \u2014 ${result.findings.length} findings`);
+      const blocking = result.findings.filter((finding) => finding.severity === "blocking");
+      const suggestions = result.findings.filter((finding) => finding.severity === "suggestion");
+      const techDebt = result.findings.filter((finding) => finding.severity === "tech_debt");
+      if (autoFixEnabled && !isAutoFix && suggestions.length > 0) {
+        core3.info(`Attempting auto-fix for ${suggestions.length} suggestions...`);
+        const pushed = await autoFixSuggestions(openaiApiKey, model, suggestions, githubToken);
+        if (pushed) {
+          core3.info("Auto-fix commit pushed \u2014 this will trigger a re-review");
+          await ghClient.setCommitStatus(
+            pr2.head_sha,
+            "pending",
+            "Auto-fix applied, awaiting re-review"
+          );
+          return;
+        }
       }
-    }
-    for (const finding of techDebt) {
+      for (const finding of techDebt) {
+        try {
+          const issueNumber = await ghClient.createIssue(finding, prNumber);
+          core3.info(`Created tech debt issue #${issueNumber}: ${finding.title}`);
+        } catch (error) {
+          core3.warning(`Failed to create issue for ${finding.id}: ${error}`);
+        }
+      }
+      await ghClient.postReview(prNumber, result);
+      const statusState = blocking.length > 0 ? "failure" : "success";
+      const statusDesc = blocking.length > 0 ? `${blocking.length} blocking issue(s) found` : "Review passed";
+      await ghClient.setCommitStatus(pr2.head_sha, statusState, statusDesc);
+      core3.info(`Posted review: ${result.status}`);
+      core3.info(`  Blocking: ${blocking.length}`);
+      core3.info(`  Suggestions: ${suggestions.length}`);
+      core3.info(`  Tech debt: ${techDebt.length}`);
+      if (blocking.length > 0) {
+        core3.setFailed(`PR review found ${blocking.length} blocking issue(s)`);
+      }
+    } catch (error) {
       try {
-        const issueNumber = await ghClient.createIssue(finding, prNumber);
-        core2.info(`Created tech debt issue #${issueNumber}: ${finding.title}`);
-      } catch (error) {
-        core2.warning(`Failed to create issue for ${finding.id}: ${error}`);
+        await ghClient.setCommitStatus(pr2.head_sha, "error", "Review failed unexpectedly");
+      } catch (statusError) {
+        core3.warning(`Failed to update commit status: ${statusError}`);
       }
-    }
-    await ghClient.postReview(prNumber, result);
-    const statusState = blocking.length > 0 ? "failure" : "success";
-    const statusDesc = blocking.length > 0 ? `${blocking.length} blocking issue(s) found` : "Review passed";
-    await ghClient.setCommitStatus(pr2.head_sha, statusState, statusDesc);
-    core2.info(`Posted review: ${result.status}`);
-    core2.info(`  Blocking: ${blocking.length}`);
-    core2.info(`  Suggestions: ${suggestions.length}`);
-    core2.info(`  Tech debt: ${techDebt.length}`);
-    if (blocking.length > 0) {
-      core2.setFailed(`PR review found ${blocking.length} blocking issue(s)`);
+      throw error;
     }
   } catch (error) {
-    core2.setFailed(`PR review failed: ${error}`);
+    core3.setFailed(`PR review failed: ${error}`);
   }
 }
 run();

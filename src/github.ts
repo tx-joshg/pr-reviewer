@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { ReviewResult, ReviewFinding, PRDetails } from './types.js';
 import { formatReviewComment } from './format.js';
@@ -71,13 +72,30 @@ export class GitHubClient {
 
     await this.deleteExistingReviews(prNumber);
 
-    await this.octokit.rest.pulls.createReview({
-      owner: this.owner,
-      repo: this.repo,
-      pull_number: prNumber,
-      body,
-      event,
-    });
+    try {
+      await this.octokit.rest.pulls.createReview({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+        body,
+        event,
+      });
+    } catch (error) {
+      if (event !== 'APPROVE') {
+        throw error;
+      }
+      core.warning(
+        `Cannot submit APPROVE review (the token may lack permission or ` +
+        `GitHub prevents self-approval). Falling back to COMMENT. Error: ${error}`
+      );
+      await this.octokit.rest.pulls.createReview({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+        body,
+        event: 'COMMENT',
+      });
+    }
   }
 
   async createIssue(finding: ReviewFinding, prNumber: number): Promise<number> {
@@ -93,7 +111,7 @@ export class GitHubClient {
 
   async setCommitStatus(
     sha: string,
-    state: 'success' | 'failure' | 'pending',
+    state: 'error' | 'success' | 'failure' | 'pending',
     description: string
   ): Promise<void> {
     await this.octokit.rest.repos.createCommitStatus({
