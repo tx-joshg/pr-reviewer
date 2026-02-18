@@ -123,6 +123,35 @@ To get the review feedback loop in Cursor, add the MCP server to your project. S
 
 ## Config Examples
 
+### Config Reference
+
+All available config fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `project_type` | string | Yes | Project identifier (e.g. `express-drizzle`, `nextjs-prisma`) |
+| `language` | string | Yes | Primary language (`typescript`, `python`, etc.) |
+| `schema.orm` | string | No | ORM name (`drizzle`, `prisma`, `sqlalchemy`) |
+| `schema.path` | string | No | Path to schema definition file |
+| `multi_tenancy.enabled` | boolean | No | Whether multi-tenancy checks are active |
+| `multi_tenancy.scope_column` | string | No | Column name used for tenant scoping |
+| `multi_tenancy.check_description` | string | No | Human-readable description of the scoping rule |
+| `multi_tenancy.applies_to` | string[] | No | Limit multi-tenancy checks to these paths only |
+| `auth.provider` | string | No | Auth provider name (`clerk`, `next-auth`, etc.) |
+| `auth.middleware_import` | string | No | Import path for auth middleware |
+| `auth.protected_routes` | string | No | Route pattern that requires auth |
+| `auth.except` | string[] | No | Routes exempt from auth requirement |
+| `auth.applies_to` | string[] | No | Limit auth checks to these paths only |
+| `testing.framework` | string | No | Test framework (`vitest`, `jest`, `pytest`) |
+| `testing.test_dir` | string | No | Directory containing tests |
+| `testing.source_dirs` | string[] | No | Source directories that should have test coverage |
+| `routes.file` | string | No | File or directory containing route definitions |
+| `routes.data_access` | string | No | File or directory for data access layer |
+| `exclude_paths` | array | No | Paths to skip for application-level checks |
+| `exclude_paths[].path` | string | — | Glob or directory path to exclude |
+| `exclude_paths[].reason` | string | — | Why this path is excluded (shown to the LLM) |
+| `conventions` | string[] | No | Project-specific rules the reviewer must respect |
+
 ### TypeScript + Express + Drizzle (multi-tenant SaaS)
 
 ```yaml
@@ -137,12 +166,14 @@ multi_tenancy:
   enabled: true
   scope_column: companyId
   check_description: "All storage methods and routes must filter by companyId"
+  applies_to: [server/routes.ts, server/storage.ts]
 
 auth:
   provider: clerk
   middleware_import: "@clerk/express"
   protected_routes: "/api/*"
   except: ["/api/health", "/api/stripe/webhook"]
+  applies_to: [server/routes.ts]
 
 testing:
   framework: vitest
@@ -152,6 +183,17 @@ testing:
 routes:
   file: server/routes.ts
   data_access: server/storage.ts
+
+exclude_paths:
+  - path: "client/src/components/ui/"
+    reason: "Shared UI primitives — no auth or tenant logic"
+  - path: "scripts/"
+    reason: "Build/dev scripts, not application code"
+
+conventions:
+  - "All API routes are defined in server/routes.ts — do not add routes elsewhere"
+  - "Storage methods in server/storage.ts always receive companyId as the first parameter"
+  - ".env.example and .cursor/mcp.json.example contain placeholder values, not real secrets"
 ```
 
 ### Next.js + Prisma
@@ -172,6 +214,7 @@ auth:
   middleware_import: next-auth/react
   protected_routes: "/api/*"
   except: ["/api/auth"]
+  applies_to: [app/api/, pages/api/]
 
 testing:
   framework: jest
@@ -181,6 +224,13 @@ testing:
 routes:
   file: app/api/
   data_access: lib/db.ts
+
+exclude_paths:
+  - path: "public/"
+    reason: "Static assets, no application logic"
+
+conventions:
+  - "Server actions use 'use server' directive — they do not need API route auth middleware"
 ```
 
 ### Python + FastAPI + SQLAlchemy
@@ -197,12 +247,14 @@ multi_tenancy:
   enabled: true
   scope_column: organization_id
   check_description: "All queries must filter by organization_id"
+  applies_to: [app/api/, app/crud/]
 
 auth:
   provider: custom-jwt
   middleware_import: app.auth
   protected_routes: "/api/v1/*"
   except: ["/api/v1/health", "/api/v1/auth/login"]
+  applies_to: [app/api/]
 
 testing:
   framework: pytest
@@ -212,6 +264,12 @@ testing:
 routes:
   file: app/api/
   data_access: app/crud/
+
+exclude_paths:
+  - path: "alembic/"
+    reason: "Migration scripts — reviewed separately"
+  - path: "app/core/config.py"
+    reason: "Settings module using pydantic-settings, not hardcoded secrets"
 ```
 
 ### Minimal config (any project)
@@ -227,6 +285,8 @@ testing:
   test_dir: tests/
   source_dirs: [src/]
 ```
+
+Even without project-specific config, the reviewer applies universal baseline rules (`.example` files aren't secrets, single-query + `.map()` isn't N+1, lock files are skipped, config values aren't magic strings).
 
 ---
 

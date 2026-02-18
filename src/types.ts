@@ -16,6 +16,11 @@ export interface ReviewResult {
   findings: ReviewFinding[];
 }
 
+export interface ExcludePath {
+  path: string;
+  reason: string;
+}
+
 export interface ReviewConfig {
   project_type: string;
   language: string;
@@ -27,12 +32,14 @@ export interface ReviewConfig {
     enabled: boolean;
     scope_column: string;
     check_description: string;
+    applies_to?: string[];
   };
   auth?: {
     provider: string;
     middleware_import: string;
     protected_routes: string;
     except: string[];
+    applies_to?: string[];
   };
   testing?: {
     framework: string;
@@ -43,6 +50,8 @@ export interface ReviewConfig {
     file: string;
     data_access: string;
   };
+  exclude_paths?: ExcludePath[];
+  conventions?: string[];
 }
 
 export interface PRDetails {

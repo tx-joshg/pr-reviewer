@@ -44387,9 +44387,54 @@ OpenAI.ContainerListResponsesPage = ContainerListResponsesPage;
 var openai_default = OpenAI;
 
 // src/prompts.ts
+function buildExcludePathsSection(config) {
+  if (!config.exclude_paths || config.exclude_paths.length === 0) {
+    return "";
+  }
+  const entries = config.exclude_paths.map((exclusion) => `- \`${exclusion.path}\` \u2014 ${exclusion.reason}`).join("\n");
+  return `## Excluded Paths
+
+The following paths are excluded from application-level checks (auth, multi-tenancy, business logic).
+Files in these directories may still be reviewed for syntax errors or security issues, but do NOT flag them for missing auth middleware, tenant scoping, or similar application-layer rules.
+
+${entries}
+`;
+}
+function buildConventionsSection(config) {
+  if (!config.conventions || config.conventions.length === 0) {
+    return "";
+  }
+  const rules = config.conventions.map((convention, index) => `${index + 1}. ${convention}`).join("\n");
+  return `## Project Conventions (Ground Truth)
+
+The following rules are authoritative for this project. Do NOT flag code that follows these conventions.
+If code violates one of these conventions, flag it as blocking.
+
+${rules}
+`;
+}
+function buildAppliesToNote(appliesTo) {
+  if (!appliesTo || appliesTo.length === 0) {
+    return "";
+  }
+  const paths = appliesTo.map((path) => `\`${path}\``).join(", ");
+  return `
+- **Scope:** Only apply these checks to files under ${paths}`;
+}
 function buildSystemPrompt(config) {
+  const excludePathsSection = buildExcludePathsSection(config);
+  const conventionsSection = buildConventionsSection(config);
   return `You are a senior software engineer performing a thorough code review on a pull request.
 Your review must be rigorous, precise, and actionable \u2014 the same quality as a principal engineer reviewing production code.
+
+${excludePathsSection}${conventionsSection}## Universal Baseline Rules
+
+These rules always apply, regardless of project-specific configuration:
+
+1. **Files ending in \`.example\` are not secrets.** A file like \`.env.example\` or \`mcp.json.example\` exists to document the expected shape of a config file. It contains placeholder values, not real credentials. Do NOT flag these as hardcoded secrets.
+2. **A single API/database call followed by \`.map()\` or \`.filter()\` is not an N+1 query.** N+1 means executing one query per item in a loop. Fetching a result set once and transforming it in memory is normal and efficient.
+3. **Generated files and lock files do not need code review.** Files like \`package-lock.json\`, \`yarn.lock\`, \`dist/\`, and build output should be ignored for code-quality checks.
+4. **Config files are not "magic strings."** Values in YAML/JSON config files (environment names, provider identifiers, paths) are configuration, not hardcoded magic strings that need extraction.
 
 ## Review Checklist
 
@@ -44417,14 +44462,14 @@ ${config.multi_tenancy?.enabled ? `### 4. Multi-Tenancy (CRITICAL)
 - Every database query in new or modified code MUST filter by \`${config.multi_tenancy.scope_column}\`
 - Check both read and write operations
 - Verify that bulk operations respect tenant boundaries
-- Missing tenant scope is ALWAYS a blocking issue` : "### 4. Multi-Tenancy\nNot applicable for this project."}
+- Missing tenant scope is ALWAYS a blocking issue${buildAppliesToNote(config.multi_tenancy.applies_to)}` : "### 4. Multi-Tenancy\nNot applicable for this project."}
 
 ${config.auth ? `### 5. Authentication & Authorization
 - Provider: ${config.auth.provider}
 - All routes matching \`${config.auth.protected_routes}\` must use auth middleware
 - Exceptions: ${config.auth.except.join(", ")}
 - New API routes without authentication are blocking issues
-- Check that authorization (role checks) is applied where needed` : "### 5. Authentication & Authorization\nReview any auth patterns found in the codebase."}
+- Check that authorization (role checks) is applied where needed${buildAppliesToNote(config.auth.applies_to)}` : "### 5. Authentication & Authorization\nReview any auth patterns found in the codebase."}
 
 ### 6. GUI / Frontend Review
 - Do UI changes follow existing component patterns and design system?
