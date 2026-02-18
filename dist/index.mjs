@@ -44543,57 +44543,56 @@ Review this pull request according to your review checklist. Submit your finding
 // src/reviewer.ts
 var REVIEW_FUNCTION = {
   type: "function",
-  function: {
-    name: "submit_review",
-    description: "Submit the structured PR review with categorized findings",
-    parameters: {
-      type: "object",
-      properties: {
-        status: {
-          type: "string",
-          enum: ["approved", "changes_requested"],
-          description: 'Overall review status. "approved" only if zero blocking findings.'
-        },
-        summary: {
-          type: "string",
-          description: "Brief 2-3 sentence summary of the review."
-        },
-        findings: {
-          type: "array",
-          description: "All findings from the review, categorized by severity.",
-          items: {
-            type: "object",
-            properties: {
-              id: {
-                type: "string",
-                description: "Unique ID: B1, B2... for blocking, S1, S2... for suggestion, T1, T2... for tech_debt"
-              },
-              title: { type: "string", description: "Short title of the finding" },
-              file: { type: "string", description: "File path relative to repo root" },
-              line: {
-                type: "number",
-                description: "Approximate line number, or null if not applicable"
-              },
-              severity: {
-                type: "string",
-                enum: ["blocking", "suggestion", "tech_debt"],
-                description: "blocking = must fix before merge, suggestion = auto-fixable trivial issue, tech_debt = tracked as issue"
-              },
-              description: {
-                type: "string",
-                description: "Detailed description of the issue and why it matters"
-              },
-              suggested_fix: {
-                type: "string",
-                description: "For suggestions: the corrected code snippet. For blocking: guidance on how to fix."
-              }
-            },
-            required: ["id", "title", "file", "severity", "description"]
-          }
-        }
+  name: "submit_review",
+  description: "Submit the structured PR review with categorized findings",
+  strict: false,
+  parameters: {
+    type: "object",
+    properties: {
+      status: {
+        type: "string",
+        enum: ["approved", "changes_requested"],
+        description: 'Overall review status. "approved" only if zero blocking findings.'
       },
-      required: ["status", "summary", "findings"]
-    }
+      summary: {
+        type: "string",
+        description: "Brief 2-3 sentence summary of the review."
+      },
+      findings: {
+        type: "array",
+        description: "All findings from the review, categorized by severity.",
+        items: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "Unique ID: B1, B2... for blocking, S1, S2... for suggestion, T1, T2... for tech_debt"
+            },
+            title: { type: "string", description: "Short title of the finding" },
+            file: { type: "string", description: "File path relative to repo root" },
+            line: {
+              type: "number",
+              description: "Approximate line number, or null if not applicable"
+            },
+            severity: {
+              type: "string",
+              enum: ["blocking", "suggestion", "tech_debt"],
+              description: "blocking = must fix before merge, suggestion = auto-fixable trivial issue, tech_debt = tracked as issue"
+            },
+            description: {
+              type: "string",
+              description: "Detailed description of the issue and why it matters"
+            },
+            suggested_fix: {
+              type: "string",
+              description: "For suggestions: the corrected code snippet. For blocking: guidance on how to fix."
+            }
+          },
+          required: ["id", "title", "file", "severity", "description"]
+        }
+      }
+    },
+    required: ["status", "summary", "findings"]
   }
 };
 var Reviewer = class {
@@ -44608,21 +44607,20 @@ var Reviewer = class {
   async review(pr2) {
     const systemPrompt = buildSystemPrompt(this.config);
     const userMessage = buildUserMessage(pr2.title, pr2.body, pr2.commits, pr2.diff, pr2.files);
-    const response = await this.client.chat.completions.create({
+    const response = await this.client.responses.create({
       model: this.model,
-      max_tokens: 8192,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage }
-      ],
+      instructions: systemPrompt,
+      input: userMessage,
       tools: [REVIEW_FUNCTION],
-      tool_choice: { type: "function", function: { name: "submit_review" } }
+      tool_choice: { type: "function", name: "submit_review" }
     });
-    const toolCall = response.choices[0]?.message?.tool_calls?.[0];
-    if (!toolCall || toolCall.function.name !== "submit_review") {
+    const functionCall = response.output.find(
+      (item) => item.type === "function_call" && item.name === "submit_review"
+    );
+    if (!functionCall) {
       throw new Error("Model did not return a structured review via submit_review function");
     }
-    const result = JSON.parse(toolCall.function.arguments);
+    const result = JSON.parse(functionCall.arguments);
     const hasBlocking = result.findings.some((finding) => finding.severity === "blocking");
     if (hasBlocking && result.status === "approved") {
       result.status = "changes_requested";
@@ -44674,27 +44672,18 @@ async function autoFixSuggestions(apiKey, model, suggestions, token) {
       const fixDescriptions = findings.map(
         (finding) => `- [${finding.id}] ${finding.title} (line ~${finding.line ?? "unknown"}): ${finding.suggested_fix}`
       ).join("\n");
-      const response = await client.chat.completions.create({
+      const response = await client.responses.create({
         model,
-        max_tokens: 8192,
-        messages: [
-          {
-            role: "system",
-            content: "You are a code fixer. Apply ONLY the requested fixes to the file content. Return ONLY the complete fixed file content with no explanation, no markdown fences, no commentary. Do NOT add comments, do NOT remove any code that is not part of the fix, do NOT restructure or reformat the file. The output must have the same number of lines (plus or minus a few for the fix itself)."
-          },
-          {
-            role: "user",
-            content: `Apply these fixes to the file:
+        instructions: "You are a code fixer. Apply ONLY the requested fixes to the file content. Return ONLY the complete fixed file content with no explanation, no markdown fences, no commentary. Do NOT add comments, do NOT remove any code that is not part of the fix, do NOT restructure or reformat the file. The output must have the same number of lines (plus or minus a few for the fix itself).",
+        input: `Apply these fixes to the file:
 
 ${fixDescriptions}
 
 Original file content (${originalLines} lines \u2014 your output must preserve all of them):
 
 ${originalContent}`
-          }
-        ]
       });
-      const fixedContent = response.choices[0]?.message?.content;
+      const fixedContent = response.output_text;
       if (!fixedContent) continue;
       let cleanContent = fixedContent;
       if (cleanContent.startsWith("```")) {

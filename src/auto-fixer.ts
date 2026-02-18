@@ -62,23 +62,14 @@ export async function autoFixSuggestions(
         )
         .join('\n');
 
-      const response = await client.chat.completions.create({
+      const response = await client.responses.create({
         model,
-        max_tokens: 8192,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a code fixer. Apply ONLY the requested fixes to the file content. Return ONLY the complete fixed file content with no explanation, no markdown fences, no commentary. Do NOT add comments, do NOT remove any code that is not part of the fix, do NOT restructure or reformat the file. The output must have the same number of lines (plus or minus a few for the fix itself).',
-          },
-          {
-            role: 'user',
-            content: `Apply these fixes to the file:\n\n${fixDescriptions}\n\nOriginal file content (${originalLines} lines — your output must preserve all of them):\n\n${originalContent}`,
-          },
-        ],
+        instructions:
+          'You are a code fixer. Apply ONLY the requested fixes to the file content. Return ONLY the complete fixed file content with no explanation, no markdown fences, no commentary. Do NOT add comments, do NOT remove any code that is not part of the fix, do NOT restructure or reformat the file. The output must have the same number of lines (plus or minus a few for the fix itself).',
+        input: `Apply these fixes to the file:\n\n${fixDescriptions}\n\nOriginal file content (${originalLines} lines — your output must preserve all of them):\n\n${originalContent}`,
       });
 
-      const fixedContent = response.choices[0]?.message?.content;
+      const fixedContent = response.output_text;
       if (!fixedContent) continue;
 
       let cleanContent = fixedContent;
