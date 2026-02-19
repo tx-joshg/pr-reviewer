@@ -53,6 +53,7 @@ async function run(): Promise<void> {
     const githubToken = core.getInput('github_token', { required: true });
     const configPath = core.getInput('review_config', { required: true });
     const autoFixEnabled = core.getInput('auto_fix') !== 'false';
+    const autoMergeEnabled = core.getInput('auto_merge') !== 'false';
     const model = core.getInput('model');
 
     const prNumber = github.context.payload.pull_request?.number;
@@ -92,6 +93,13 @@ async function run(): Promise<void> {
         findings: [],
       });
       await ghClient.setCommitStatus(pr.head_sha, 'success', 'All files excluded — auto-approved');
+
+      if (autoMergeEnabled && pr.auto_merge) {
+        const merged = await ghClient.mergePR(prNumber, pr.auto_merge.merge_method);
+        if (merged) {
+          core.info(`PR #${prNumber} merged (${pr.auto_merge.merge_method})`);
+        }
+      }
       return;
     }
 
@@ -154,6 +162,11 @@ async function run(): Promise<void> {
 
       if (blocking.length > 0) {
         core.setFailed(`PR review found ${blocking.length} blocking issue(s)`);
+      } else if (autoMergeEnabled && pr.auto_merge) {
+        const merged = await ghClient.mergePR(prNumber, pr.auto_merge.merge_method);
+        if (merged) {
+          core.info(`PR #${prNumber} merged (${pr.auto_merge.merge_method})`);
+        }
       }
     } catch (error) {
       try {

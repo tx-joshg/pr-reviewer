@@ -54,6 +54,12 @@ export interface ReviewConfig {
   conventions?: string[];
 }
 
+export type MergeMethod = 'merge' | 'squash' | 'rebase';
+
+export interface PRAutoMerge {
+  merge_method: MergeMethod;
+}
+
 export interface PRDetails {
   number: number;
   title: string;
@@ -64,6 +70,7 @@ export interface PRDetails {
   base_branch: string;
   head_branch: string;
   head_sha: string;
+  auto_merge: PRAutoMerge | null;
 }
 
 export interface PRFile {

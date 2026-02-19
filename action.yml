@@ -19,6 +19,10 @@ inputs:
     description: 'Enable auto-fix for trivial issues'
     required: false
     default: 'true'
+  auto_merge:
+    description: 'Merge the PR after a passing review (only when auto-merge is enabled on the PR)'
+    required: false
+    default: 'true'
   model:
     description: 'OpenAI model to use for reviews'
     required: false

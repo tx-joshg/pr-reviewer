@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { ReviewResult, ReviewFinding, PRDetails } from './types.js';
+import { ReviewResult, ReviewFinding, PRDetails, MergeMethod } from './types.js';
 import { formatReviewComment } from './format.js';
 
 type Octokit = ReturnType<typeof github.getOctokit>;
@@ -63,6 +63,9 @@ export class GitHubClient {
       base_branch: prResponse.data.base.ref,
       head_branch: prResponse.data.head.ref,
       head_sha: prResponse.data.head.sha,
+      auto_merge: prResponse.data.auto_merge
+        ? { merge_method: prResponse.data.auto_merge.merge_method as MergeMethod }
+        : null,
     };
   }
 
@@ -119,6 +122,24 @@ export class GitHubClient {
       description,
       context: 'pr-review',
     });
+  }
+
+  async mergePR(
+    prNumber: number,
+    mergeMethod: MergeMethod
+  ): Promise<boolean> {
+    try {
+      await this.octokit.rest.pulls.merge({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+        merge_method: mergeMethod,
+      });
+      return true;
+    } catch (error) {
+      core.warning(`Failed to merge PR #${prNumber}: ${error}`);
+      return false;
+    }
   }
 
   async ensureLabelsExist(): Promise<void> {
