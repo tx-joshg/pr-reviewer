@@ -19748,10 +19748,10 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("error", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports.error = error;
-    function warning3(message, properties = {}) {
+    function warning4(message, properties = {}) {
       (0, command_1.issueCommand)("warning", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
-    exports.warning = warning3;
+    exports.warning = warning4;
     function notice(message, properties = {}) {
       (0, command_1.issueCommand)("notice", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
@@ -25530,12 +25530,12 @@ var require_log = __commonJS({
       if (logLevel === "debug")
         console.log(...messages);
     }
-    function warn(logLevel, warning3) {
+    function warn(logLevel, warning4) {
       if (logLevel === "debug" || logLevel === "warn") {
         if (typeof node_process.emitWarning === "function")
-          node_process.emitWarning(warning3);
+          node_process.emitWarning(warning4);
         else
-          console.warn(warning3);
+          console.warn(warning4);
       }
     }
     exports.debug = debug2;
@@ -28988,9 +28988,9 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code, message, warning3) => {
+        this.onError = (source, code, message, warning4) => {
           const pos = getErrorPos(source);
-          if (warning3)
+          if (warning4)
             this.warnings.push(new errors.YAMLWarning(pos, code, message));
           else
             this.errors.push(new errors.YAMLParseError(pos, code, message));
@@ -29061,10 +29061,10 @@ ${cb}` : comment;
           console.dir(token, { depth: null });
         switch (token.type) {
           case "directive":
-            this.directives.add(token.source, (offset, message, warning3) => {
+            this.directives.add(token.source, (offset, message, warning4) => {
               const pos = getErrorPos(token);
               pos[0] += offset;
-              this.onError(pos, "BAD_DIRECTIVE", message, warning3);
+              this.onError(pos, "BAD_DIRECTIVE", message, warning4);
             });
             this.prelude.push(token.source);
             this.atDirectives = true;
@@ -31089,7 +31089,7 @@ var require_public_api = __commonJS({
       const doc = parseDocument(src, options);
       if (!doc)
         return null;
-      doc.warnings.forEach((warning3) => log.warn(doc.options.logLevel, warning3));
+      doc.warnings.forEach((warning4) => log.warn(doc.options.logLevel, warning4));
       if (doc.errors.length > 0) {
         if (doc.options.logLevel !== "silent")
           throw doc.errors[0];
@@ -37702,7 +37702,8 @@ var GitHubClient = class {
       })),
       base_branch: prResponse.data.base.ref,
       head_branch: prResponse.data.head.ref,
-      head_sha: prResponse.data.head.sha
+      head_sha: prResponse.data.head.sha,
+      auto_merge: prResponse.data.auto_merge ? { merge_method: prResponse.data.auto_merge.merge_method } : null
     };
   }
   async postReview(prNumber, result) {
@@ -37757,6 +37758,20 @@ ${finding.suggested_fix}
       description,
       context: "pr-review"
     });
+  }
+  async mergePR(prNumber, mergeMethod) {
+    try {
+      await this.octokit.rest.pulls.merge({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+        merge_method: mergeMethod
+      });
+      return true;
+    } catch (error) {
+      core.warning(`Failed to merge PR #${prNumber}: ${error}`);
+      return false;
+    }
   }
   async ensureLabelsExist() {
     const labels = [
@@ -44788,6 +44803,7 @@ async function run() {
     const githubToken = core3.getInput("github_token", { required: true });
     const configPath = core3.getInput("review_config", { required: true });
     const autoFixEnabled = core3.getInput("auto_fix") !== "false";
+    const autoMergeEnabled = core3.getInput("auto_merge") !== "false";
     const model = core3.getInput("model");
     const prNumber = github3.context.payload.pull_request?.number;
     if (!prNumber) {
@@ -44819,6 +44835,12 @@ async function run() {
         findings: []
       });
       await ghClient.setCommitStatus(pr2.head_sha, "success", "All files excluded \u2014 auto-approved");
+      if (autoMergeEnabled && pr2.auto_merge) {
+        const merged = await ghClient.mergePR(prNumber, pr2.auto_merge.merge_method);
+        if (merged) {
+          core3.info(`PR #${prNumber} merged (${pr2.auto_merge.merge_method})`);
+        }
+      }
       return;
     }
     const latestCommitMessage = pr2.commits.at(-1)?.message ?? "";
@@ -44865,6 +44887,11 @@ async function run() {
       core3.info(`  Tech debt: ${techDebt.length}`);
       if (blocking.length > 0) {
         core3.setFailed(`PR review found ${blocking.length} blocking issue(s)`);
+      } else if (autoMergeEnabled && pr2.auto_merge) {
+        const merged = await ghClient.mergePR(prNumber, pr2.auto_merge.merge_method);
+        if (merged) {
+          core3.info(`PR #${prNumber} merged (${pr2.auto_merge.merge_method})`);
+        }
       }
     } catch (error) {
       try {
