@@ -68,34 +68,17 @@ export class GitHubClient {
 
   async postReview(prNumber: number, result: ReviewResult): Promise<void> {
     const body = formatReviewComment(this.repo, prNumber, result);
-    const event = result.status === 'approved' ? 'APPROVE' : 'REQUEST_CHANGES';
+    const event = result.status === 'approved' ? 'COMMENT' : 'REQUEST_CHANGES';
 
     await this.deleteExistingReviews(prNumber);
 
-    try {
-      await this.octokit.rest.pulls.createReview({
-        owner: this.owner,
-        repo: this.repo,
-        pull_number: prNumber,
-        body,
-        event,
-      });
-    } catch (error) {
-      if (event !== 'APPROVE') {
-        throw error;
-      }
-      core.warning(
-        `Cannot submit APPROVE review (the token may lack permission or ` +
-        `GitHub prevents self-approval). Falling back to COMMENT. Error: ${error}`
-      );
-      await this.octokit.rest.pulls.createReview({
-        owner: this.owner,
-        repo: this.repo,
-        pull_number: prNumber,
-        body,
-        event: 'COMMENT',
-      });
-    }
+    await this.octokit.rest.pulls.createReview({
+      owner: this.owner,
+      repo: this.repo,
+      pull_number: prNumber,
+      body,
+      event,
+    });
   }
 
   async createIssue(finding: ReviewFinding, prNumber: number): Promise<number> {
