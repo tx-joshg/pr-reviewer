@@ -26,15 +26,17 @@ GitHub Action (this repo)
     ├── Auto-fixes trivial suggestions (Level 2)
     ├── Creates GitHub Issues for tech debt
     ├── Posts review (approve / request changes)
-    └── Sets commit status (pass / fail)
-    │
-    ▼ (if blocking issues found)
-    │
+    ├── Sets commit status (pass / fail)
+    └── Merges PR (if approved + auto-merge enabled)
+    │                           │
+    │ (if blocking)             ▼
+    │                    Deploys from main
+    ▼                   (Railway, Vercel, etc.)
 Cursor + MCP Server (local)
     ├── Fetches structured findings from PR
     ├── Queries dev/prod database for context
     ├── You fix the issues with AI assistance
-    └── Push → action re-runs → passes → merge
+    └── Push → action re-runs → passes → merges → deploys
 ```
 
 ---
@@ -64,33 +66,44 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - uses: tx-joshg/pr-reviewer@main
         with:
           review_config: .github/review-config.yml
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
+
+      - name: Merge PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh pr merge ${{ github.event.pull_request.number }} --squash --admin
 ```
 
 ### Step 2: Create the review config
 
 Create `.github/review-config.yml` with rules specific to your project. See [Config Examples](#config-examples) below for templates.
 
-### Step 3: Add the OpenAI secret
+### Step 3: Add secrets
 
 In your GitHub repo: Settings > Secrets and variables > Actions > New repository secret:
 
-- Name: `OPENAI_API_KEY`
-- Value: your OpenAI API key
-
-The `GITHUB_TOKEN` is automatically provided by GitHub Actions — no setup needed.
+- `OPENAI_API_KEY` — your OpenAI API key
+- `APP_ID` — your GitHub App's ID
+- `APP_PRIVATE_KEY` — your GitHub App's private key (PEM format)
 
 ### Step 4: Configure branch protection
 
-In your GitHub repo: Settings > Branches > Add branch protection rule for `main`:
+In your GitHub repo: Settings > Rules > New ruleset for `main`:
 
 - **Require status checks to pass before merging**: select `pr-review`
-- **Require pull request reviews before merging**: 1 approval minimum
-- **Do not allow bypassing the above settings**
+- **Require a pull request before merging**: set required approvals to **0** — the `pr-review` status check is the gate, not human approvals
+- **Add the GitHub App as a bypass actor** so the `--admin` merge works
 
 ### Step 5 (optional): Set up the MCP server for Cursor
 
@@ -107,6 +120,7 @@ To get the review feedback loop in Cursor, add the MCP server to your project. S
 | `github_token` | Yes | — | GitHub token with repo permissions |
 | `database_url` | No | — | Read-only database URL |
 | `auto_fix` | No | `true` | Enable auto-fix for trivial issues |
+| `auto_merge` | No | `true` | Merge the PR after a passing review (only when auto-merge is enabled on the PR) |
 | `model` | No | `gpt-5.2-codex` | OpenAI model to use |
 
 ---
@@ -371,7 +385,7 @@ Once everything is set up, the workflow looks like this:
 3. If issues are found, open Cursor and say: **"Review PR #42"**
 4. Cursor uses the MCP tools to fetch findings and fix them
 5. Push the fixes — the action re-runs automatically
-6. When it passes, the PR is approved and ready to merge
+6. When it passes, the workflow merges the PR automatically and Railway (or your deployment platform) deploys from main
 
 ---
 
@@ -379,10 +393,13 @@ Once everything is set up, the workflow looks like this:
 
 When adding PR Reviewer to a new project:
 
+- [ ] Create a GitHub App with `Contents: write` and `Pull requests: write` permissions
+- [ ] Add `APP_ID` and `APP_PRIVATE_KEY` as repo secrets
+- [ ] Add `OPENAI_API_KEY` as a GitHub repo secret
 - [ ] Create `.github/workflows/pr-review.yml` (copy from Quick Setup above)
 - [ ] Create `.github/review-config.yml` (use a Config Example as starting point)
-- [ ] Add `OPENAI_API_KEY` as a GitHub repo secret
-- [ ] Set up branch protection on `main` (require `pr-review` status check)
+- [ ] Set up a ruleset on `main` (require `pr-review` status check, 0 required approvals)
+- [ ] Add the GitHub App as a bypass actor in the repository ruleset
 - [ ] (Optional) Copy `mcp-server/` directory and configure `.cursor/mcp.json`
 - [ ] (Optional) Add `.cursor/rules/pr-review.mdc` for the Cursor feedback loop
 - [ ] (Optional) Add `.cursor/mcp.json` to `.gitignore`, commit `.cursor/mcp.json.example`
