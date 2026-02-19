@@ -17594,12 +17594,12 @@ var require_lib = __commonJS({
             throw new Error("Client has already been disposed.");
           }
           const parsedUrl = new URL(requestUrl);
-          let info3 = this._prepareRequest(verb, parsedUrl, headers);
+          let info4 = this._prepareRequest(verb, parsedUrl, headers);
           const maxTries = this._allowRetries && RetryableHttpVerbs.includes(verb) ? this._maxRetries + 1 : 1;
           let numTries = 0;
           let response;
           do {
-            response = yield this.requestRaw(info3, data);
+            response = yield this.requestRaw(info4, data);
             if (response && response.message && response.message.statusCode === HttpCodes.Unauthorized) {
               let authenticationHandler;
               for (const handler of this.handlers) {
@@ -17609,7 +17609,7 @@ var require_lib = __commonJS({
                 }
               }
               if (authenticationHandler) {
-                return authenticationHandler.handleAuthentication(this, info3, data);
+                return authenticationHandler.handleAuthentication(this, info4, data);
               } else {
                 return response;
               }
@@ -17632,8 +17632,8 @@ var require_lib = __commonJS({
                   }
                 }
               }
-              info3 = this._prepareRequest(verb, parsedRedirectUrl, headers);
-              response = yield this.requestRaw(info3, data);
+              info4 = this._prepareRequest(verb, parsedRedirectUrl, headers);
+              response = yield this.requestRaw(info4, data);
               redirectsRemaining--;
             }
             if (!response.message.statusCode || !HttpResponseRetryCodes.includes(response.message.statusCode)) {
@@ -17662,7 +17662,7 @@ var require_lib = __commonJS({
        * @param info
        * @param data
        */
-      requestRaw(info3, data) {
+      requestRaw(info4, data) {
         return __awaiter(this, void 0, void 0, function* () {
           return new Promise((resolve, reject) => {
             function callbackForResult(err, res) {
@@ -17674,7 +17674,7 @@ var require_lib = __commonJS({
                 resolve(res);
               }
             }
-            this.requestRawWithCallback(info3, data, callbackForResult);
+            this.requestRawWithCallback(info4, data, callbackForResult);
           });
         });
       }
@@ -17684,12 +17684,12 @@ var require_lib = __commonJS({
        * @param data
        * @param onResult
        */
-      requestRawWithCallback(info3, data, onResult) {
+      requestRawWithCallback(info4, data, onResult) {
         if (typeof data === "string") {
-          if (!info3.options.headers) {
-            info3.options.headers = {};
+          if (!info4.options.headers) {
+            info4.options.headers = {};
           }
-          info3.options.headers["Content-Length"] = Buffer.byteLength(data, "utf8");
+          info4.options.headers["Content-Length"] = Buffer.byteLength(data, "utf8");
         }
         let callbackCalled = false;
         function handleResult(err, res) {
@@ -17698,7 +17698,7 @@ var require_lib = __commonJS({
             onResult(err, res);
           }
         }
-        const req = info3.httpModule.request(info3.options, (msg) => {
+        const req = info4.httpModule.request(info4.options, (msg) => {
           const res = new HttpClientResponse(msg);
           handleResult(void 0, res);
         });
@@ -17710,7 +17710,7 @@ var require_lib = __commonJS({
           if (socket) {
             socket.end();
           }
-          handleResult(new Error(`Request timeout: ${info3.options.path}`));
+          handleResult(new Error(`Request timeout: ${info4.options.path}`));
         });
         req.on("error", function(err) {
           handleResult(err);
@@ -17746,27 +17746,27 @@ var require_lib = __commonJS({
         return this._getProxyAgentDispatcher(parsedUrl, proxyUrl);
       }
       _prepareRequest(method, requestUrl, headers) {
-        const info3 = {};
-        info3.parsedUrl = requestUrl;
-        const usingSsl = info3.parsedUrl.protocol === "https:";
-        info3.httpModule = usingSsl ? https : http;
+        const info4 = {};
+        info4.parsedUrl = requestUrl;
+        const usingSsl = info4.parsedUrl.protocol === "https:";
+        info4.httpModule = usingSsl ? https : http;
         const defaultPort = usingSsl ? 443 : 80;
-        info3.options = {};
-        info3.options.host = info3.parsedUrl.hostname;
-        info3.options.port = info3.parsedUrl.port ? parseInt(info3.parsedUrl.port) : defaultPort;
-        info3.options.path = (info3.parsedUrl.pathname || "") + (info3.parsedUrl.search || "");
-        info3.options.method = method;
-        info3.options.headers = this._mergeHeaders(headers);
+        info4.options = {};
+        info4.options.host = info4.parsedUrl.hostname;
+        info4.options.port = info4.parsedUrl.port ? parseInt(info4.parsedUrl.port) : defaultPort;
+        info4.options.path = (info4.parsedUrl.pathname || "") + (info4.parsedUrl.search || "");
+        info4.options.method = method;
+        info4.options.headers = this._mergeHeaders(headers);
         if (this.userAgent != null) {
-          info3.options.headers["user-agent"] = this.userAgent;
+          info4.options.headers["user-agent"] = this.userAgent;
         }
-        info3.options.agent = this._getAgent(info3.parsedUrl);
+        info4.options.agent = this._getAgent(info4.parsedUrl);
         if (this.handlers) {
           for (const handler of this.handlers) {
-            handler.prepareRequest(info3.options);
+            handler.prepareRequest(info4.options);
           }
         }
-        return info3;
+        return info4;
       }
       _mergeHeaders(headers) {
         if (this.requestOptions && this.requestOptions.headers) {
@@ -19756,10 +19756,10 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("notice", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports.notice = notice;
-    function info3(message) {
+    function info4(message) {
       process.stdout.write(message + os.EOL);
     }
-    exports.info = info3;
+    exports.info = info4;
     function startGroup(name) {
       (0, command_1.issue)("group", name);
     }
@@ -37580,12 +37580,13 @@ var init_fileFromPath = __esm({
 });
 
 // src/index.ts
-var core2 = __toESM(require_core(), 1);
+var core3 = __toESM(require_core(), 1);
 var github3 = __toESM(require_github(), 1);
 var import_yaml = __toESM(require_dist(), 1);
 import { readFile as readFile2 } from "fs/promises";
 
 // src/github.ts
+var core = __toESM(require_core(), 1);
 var github = __toESM(require_github(), 1);
 
 // src/format.ts
@@ -37706,14 +37707,27 @@ var GitHubClient = class {
   }
   async postReview(prNumber, result) {
     const body = formatReviewComment(this.repo, prNumber, result);
-    const event = result.status === "approved" ? "COMMENT" : "REQUEST_CHANGES";
     await this.deleteExistingReviews(prNumber);
+    if (result.status === "approved") {
+      try {
+        await this.octokit.rest.pulls.createReview({
+          owner: this.owner,
+          repo: this.repo,
+          pull_number: prNumber,
+          body,
+          event: "APPROVE"
+        });
+        return;
+      } catch {
+        core.info("APPROVE not permitted by token \u2014 posting as COMMENT instead");
+      }
+    }
     await this.octokit.rest.pulls.createReview({
       owner: this.owner,
       repo: this.repo,
       pull_number: prNumber,
       body,
-      event
+      event: result.status === "approved" ? "COMMENT" : "REQUEST_CHANGES"
     });
   }
   async createIssue(finding, prNumber) {
@@ -39982,12 +39996,12 @@ var CursorPage = class extends AbstractPage {
   }
   // @deprecated Please use `nextPageInfo()` instead
   nextPageParams() {
-    const info3 = this.nextPageInfo();
-    if (!info3)
+    const info4 = this.nextPageInfo();
+    if (!info4)
       return null;
-    if ("params" in info3)
-      return info3.params;
-    const params = Object.fromEntries(info3.url.searchParams);
+    if ("params" in info4)
+      return info4.params;
+    const params = Object.fromEntries(info4.url.searchParams);
     if (!Object.keys(params).length)
       return null;
     return params;
@@ -44636,7 +44650,7 @@ var Reviewer = class {
 };
 
 // src/auto-fixer.ts
-var core = __toESM(require_core(), 1);
+var core2 = __toESM(require_core(), 1);
 var github2 = __toESM(require_github(), 1);
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -44658,7 +44672,7 @@ async function autoFixSuggestions(apiKey, model, suggestions, token) {
     fileGroups.set(finding.file, existing);
   }
   if (fileGroups.size === 0) {
-    core.info("No suggestions with concrete fixes to auto-apply");
+    core2.info("No suggestions with concrete fixes to auto-apply");
     return false;
   }
   const client = new openai_default({ apiKey });
@@ -44670,7 +44684,7 @@ async function autoFixSuggestions(apiKey, model, suggestions, token) {
       const originalContent = await readFile(filePath, "utf-8");
       const originalLines = originalContent.split("\n").length;
       if (originalLines > MAX_FILE_LINES) {
-        core.info(
+        core2.info(
           `Skipping auto-fix for ${filePath} (${originalLines} lines exceeds ${MAX_FILE_LINES} limit \u2014 too risky for full-file replacement)`
         );
         continue;
@@ -44702,7 +44716,7 @@ ${originalContent}`
       const fixedLines = cleanContent.split("\n").length;
       const lossPercent = (originalLines - fixedLines) / originalLines * 100;
       if (lossPercent > MAX_LINE_LOSS_PERCENT) {
-        core.warning(
+        core2.warning(
           `Rejecting auto-fix for ${filePath}: output lost ${lossPercent.toFixed(1)}% of lines (${originalLines} \u2192 ${fixedLines}). This likely indicates truncation.`
         );
         continue;
@@ -44710,10 +44724,10 @@ ${originalContent}`
       if (cleanContent.trim() !== originalContent.trim()) {
         await writeFile(filePath, cleanContent);
         filesChanged++;
-        core.info(`Auto-fixed: ${filePath} (${findings.length} suggestions applied, ${originalLines} \u2192 ${fixedLines} lines)`);
+        core2.info(`Auto-fixed: ${filePath} (${findings.length} suggestions applied, ${originalLines} \u2192 ${fixedLines} lines)`);
       }
     } catch (error) {
-      core.warning(`Failed to auto-fix ${filePath}: ${error}`);
+      core2.warning(`Failed to auto-fix ${filePath}: ${error}`);
     }
   }
   if (filesChanged === 0) {
@@ -44723,7 +44737,7 @@ ${originalContent}`
     const prNumber = github2.context.payload.pull_request?.number;
     const headRef = github2.context.payload.pull_request?.head?.ref;
     if (!headRef) {
-      core.warning("Could not determine PR head branch for auto-fix push");
+      core2.warning("Could not determine PR head branch for auto-fix push");
       return false;
     }
     await execAsync('git config user.name "pr-reviewer[bot]"');
@@ -44736,10 +44750,10 @@ Auto-fixed ${filesChanged} file(s) from PR #${prNumber} review"`
     );
     const remote = `https://x-access-token:${token}@github.com/${github2.context.repo.owner}/${github2.context.repo.repo}.git`;
     await execAsync(`git push ${remote} HEAD:${headRef}`);
-    core.info(`Pushed auto-fix commit for ${filesChanged} files`);
+    core2.info(`Pushed auto-fix commit for ${filesChanged} files`);
     return true;
   } catch (error) {
-    core.warning(`Failed to push auto-fix commit: ${error}`);
+    core2.warning(`Failed to push auto-fix commit: ${error}`);
     return false;
   }
 }
@@ -44770,17 +44784,17 @@ function filterExcludedFiles(files, diff, excludePaths) {
 }
 async function run() {
   try {
-    const openaiApiKey = core2.getInput("openai_api_key", { required: true });
-    const githubToken = core2.getInput("github_token", { required: true });
-    const configPath = core2.getInput("review_config", { required: true });
-    const autoFixEnabled = core2.getInput("auto_fix") !== "false";
-    const model = core2.getInput("model");
+    const openaiApiKey = core3.getInput("openai_api_key", { required: true });
+    const githubToken = core3.getInput("github_token", { required: true });
+    const configPath = core3.getInput("review_config", { required: true });
+    const autoFixEnabled = core3.getInput("auto_fix") !== "false";
+    const model = core3.getInput("model");
     const prNumber = github3.context.payload.pull_request?.number;
     if (!prNumber) {
-      core2.setFailed("This action must be triggered by a pull_request event");
+      core3.setFailed("This action must be triggered by a pull_request event");
       return;
     }
-    core2.info(`Reviewing PR #${prNumber}...`);
+    core3.info(`Reviewing PR #${prNumber}...`);
     const configContent = await readFile2(configPath, "utf-8");
     const config = (0, import_yaml.parse)(configContent);
     const ghClient = new GitHubClient(githubToken);
@@ -44794,11 +44808,11 @@ async function run() {
       pr2.files = filtered.files;
       pr2.diff = filtered.diff;
       if (excludedFilenames.length > 0) {
-        core2.info(`Excluded ${excludedFilenames.length} file(s) matching exclude_paths from review`);
+        core3.info(`Excluded ${excludedFilenames.length} file(s) matching exclude_paths from review`);
       }
     }
     if (pr2.files.length === 0) {
-      core2.info("All files in this PR are excluded from review \u2014 auto-approving");
+      core3.info("All files in this PR are excluded from review \u2014 auto-approving");
       await ghClient.postReview(prNumber, {
         status: "approved",
         summary: `All ${excludedFilenames.length} file(s) in this PR match exclude_paths and are exempt from application-level review. Auto-approved.`,
@@ -44810,21 +44824,21 @@ async function run() {
     const latestCommitMessage = pr2.commits.at(-1)?.message ?? "";
     const isAutoFix = isAutoFixCommit(latestCommitMessage);
     if (isAutoFix) {
-      core2.info("Latest commit is an auto-fix \u2014 skipping auto-fix to prevent loops");
+      core3.info("Latest commit is an auto-fix \u2014 skipping auto-fix to prevent loops");
     }
     await ghClient.setCommitStatus(pr2.head_sha, "pending", "Review in progress...");
     try {
-      core2.info(`PR "${pr2.title}" \u2014 ${pr2.files.length} files changed, ${pr2.commits.length} commits`);
+      core3.info(`PR "${pr2.title}" \u2014 ${pr2.files.length} files changed, ${pr2.commits.length} commits`);
       const result = await reviewer.review(pr2, excludedFilenames);
-      core2.info(`Review complete: ${result.status} \u2014 ${result.findings.length} findings`);
+      core3.info(`Review complete: ${result.status} \u2014 ${result.findings.length} findings`);
       const blocking = result.findings.filter((finding) => finding.severity === "blocking");
       const suggestions = result.findings.filter((finding) => finding.severity === "suggestion");
       const techDebt = result.findings.filter((finding) => finding.severity === "tech_debt");
       if (autoFixEnabled && !isAutoFix && suggestions.length > 0) {
-        core2.info(`Attempting auto-fix for ${suggestions.length} suggestions...`);
+        core3.info(`Attempting auto-fix for ${suggestions.length} suggestions...`);
         const pushed = await autoFixSuggestions(openaiApiKey, model, suggestions, githubToken);
         if (pushed) {
-          core2.info("Auto-fix commit pushed \u2014 this will trigger a re-review");
+          core3.info("Auto-fix commit pushed \u2014 this will trigger a re-review");
           await ghClient.setCommitStatus(
             pr2.head_sha,
             "pending",
@@ -44836,32 +44850,32 @@ async function run() {
       for (const finding of techDebt) {
         try {
           const issueNumber = await ghClient.createIssue(finding, prNumber);
-          core2.info(`Created tech debt issue #${issueNumber}: ${finding.title}`);
+          core3.info(`Created tech debt issue #${issueNumber}: ${finding.title}`);
         } catch (error) {
-          core2.warning(`Failed to create issue for ${finding.id}: ${error}`);
+          core3.warning(`Failed to create issue for ${finding.id}: ${error}`);
         }
       }
       await ghClient.postReview(prNumber, result);
       const statusState = blocking.length > 0 ? "failure" : "success";
       const statusDesc = blocking.length > 0 ? `${blocking.length} blocking issue(s) found` : "Review passed";
       await ghClient.setCommitStatus(pr2.head_sha, statusState, statusDesc);
-      core2.info(`Posted review: ${result.status}`);
-      core2.info(`  Blocking: ${blocking.length}`);
-      core2.info(`  Suggestions: ${suggestions.length}`);
-      core2.info(`  Tech debt: ${techDebt.length}`);
+      core3.info(`Posted review: ${result.status}`);
+      core3.info(`  Blocking: ${blocking.length}`);
+      core3.info(`  Suggestions: ${suggestions.length}`);
+      core3.info(`  Tech debt: ${techDebt.length}`);
       if (blocking.length > 0) {
-        core2.setFailed(`PR review found ${blocking.length} blocking issue(s)`);
+        core3.setFailed(`PR review found ${blocking.length} blocking issue(s)`);
       }
     } catch (error) {
       try {
         await ghClient.setCommitStatus(pr2.head_sha, "error", "Review failed unexpectedly");
       } catch (statusError) {
-        core2.warning(`Failed to update commit status: ${statusError}`);
+        core3.warning(`Failed to update commit status: ${statusError}`);
       }
       throw error;
     }
   } catch (error) {
-    core2.setFailed(`PR review failed: ${error}`);
+    core3.setFailed(`PR review failed: ${error}`);
   }
 }
 run();

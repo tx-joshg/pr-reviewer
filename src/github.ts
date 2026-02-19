@@ -68,16 +68,30 @@ export class GitHubClient {
 
   async postReview(prNumber: number, result: ReviewResult): Promise<void> {
     const body = formatReviewComment(this.repo, prNumber, result);
-    const event = result.status === 'approved' ? 'COMMENT' : 'REQUEST_CHANGES';
 
     await this.deleteExistingReviews(prNumber);
+
+    if (result.status === 'approved') {
+      try {
+        await this.octokit.rest.pulls.createReview({
+          owner: this.owner,
+          repo: this.repo,
+          pull_number: prNumber,
+          body,
+          event: 'APPROVE',
+        });
+        return;
+      } catch {
+        core.info('APPROVE not permitted by token — posting as COMMENT instead');
+      }
+    }
 
     await this.octokit.rest.pulls.createReview({
       owner: this.owner,
       repo: this.repo,
       pull_number: prNumber,
       body,
-      event,
+      event: result.status === 'approved' ? 'COMMENT' : 'REQUEST_CHANGES',
     });
   }
 
