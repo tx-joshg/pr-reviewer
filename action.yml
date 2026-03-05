@@ -5,9 +5,17 @@ inputs:
     description: 'Path to the review configuration file'
     required: true
     default: '.github/review-config.yml'
-  openai_api_key:
-    description: 'OpenAI API key'
+  provider:
+    description: 'LLM provider to use (openai, anthropic, gemini). Use openai for any OpenAI-compatible API (Together, Groq, Ollama, vLLM, etc.) with base_url.'
+    required: false
+    default: 'openai'
+  api_key:
+    description: 'API key for the configured LLM provider'
     required: true
+  base_url:
+    description: 'Custom API base URL for OpenAI-compatible providers (e.g. http://localhost:11434/v1 for Ollama, https://api.together.xyz/v1 for Together)'
+    required: false
+    default: ''
   github_token:
     description: 'GitHub token with repo permissions'
     required: true
@@ -24,9 +32,9 @@ inputs:
     required: false
     default: 'true'
   model:
-    description: 'OpenAI model to use for reviews'
+    description: 'Model name to use for reviews (provider-specific, e.g. gpt-4o, claude-sonnet-4-20250514, gemini-2.0-flash)'
     required: false
-    default: 'gpt-5.2-codex'
+    default: 'gpt-4o'
 runs:
   using: 'node20'
   main: 'dist/index.mjs'

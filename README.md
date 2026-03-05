@@ -1,6 +1,6 @@
 # PR Reviewer
 
-AI-powered senior developer PR review with auto-fix capabilities. Uses OpenAI to perform a comprehensive code review on every pull request, automatically fixing trivial issues and creating GitHub Issues for tech debt.
+AI-powered senior developer PR review with auto-fix capabilities. Uses any LLM provider (OpenAI, Anthropic, Google Gemini, or any OpenAI-compatible API) to perform a comprehensive code review on every pull request, automatically fixing trivial issues and creating GitHub Issues for tech debt.
 
 Works with **any project** — configure once and every PR gets reviewed automatically. Pairs with a local MCP server for a Cursor-based feedback loop.
 
@@ -11,6 +11,7 @@ Works with **any project** — configure once and every PR gets reviewed automat
 - **Tech debt tracking** — non-blocking issues are filed as GitHub Issues with `tech-debt` label
 - **Blocking checks** — critical issues (security, missing auth, tenant scope) block the PR until fixed
 - **Structured output** — review findings are machine-parseable for integration with MCP servers and Cursor
+- **Model agnostic** — use OpenAI, Anthropic, Google Gemini, or any OpenAI-compatible API (Together, Groq, Ollama, vLLM, etc.)
 - **Reusable** — one action repo, per-project config files
 
 ## System Overview
@@ -22,7 +23,7 @@ PR opened/updated
 GitHub Action (this repo)
     ├── Fetches PR diff, files, commits
     ├── Loads project-specific review-config.yml
-    ├── Sends to OpenAI for structured review
+    ├── Sends to configured LLM for structured review
     ├── Auto-fixes trivial suggestions (Level 2)
     ├── Creates GitHub Issues for tech debt
     ├── Posts review (approve / request changes)
@@ -76,7 +77,9 @@ jobs:
       - uses: tx-joshg/pr-reviewer@main
         with:
           review_config: .github/review-config.yml
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          provider: openai                            # or anthropic, gemini
+          api_key: ${{ secrets.LLM_API_KEY }}
+          model: gpt-4o                               # provider-specific model name
           github_token: ${{ steps.app-token.outputs.token }}
 
       - name: Merge PR
@@ -93,7 +96,7 @@ Create `.github/review-config.yml` with rules specific to your project. See [Con
 
 In your GitHub repo: Settings > Secrets and variables > Actions > New repository secret:
 
-- `OPENAI_API_KEY` — your OpenAI API key
+- `LLM_API_KEY` — API key for your chosen LLM provider
 - `APP_ID` — your GitHub App's ID
 - `APP_PRIVATE_KEY` — your GitHub App's private key (PEM format)
 
@@ -111,17 +114,35 @@ To get the review feedback loop in Cursor, add the MCP server to your project. S
 
 ---
 
+## Supported Providers
+
+| Provider | `provider` value | Example `model` | Notes |
+|----------|-----------------|-----------------|-------|
+| OpenAI | `openai` | `gpt-4o` | Default provider |
+| Anthropic | `anthropic` | `claude-sonnet-4-20250514` | Uses Messages API with tool_use |
+| Google Gemini | `gemini` | `gemini-2.0-flash` | Uses Google GenAI SDK |
+| Together AI | `openai` | `meta-llama/Llama-3-70b-chat-hf` | Set `base_url: https://api.together.xyz/v1` |
+| Groq | `openai` | `llama3-70b-8192` | Set `base_url: https://api.groq.com/openai/v1` |
+| Ollama (local) | `openai` | `llama3` | Set `base_url: http://localhost:11434/v1` |
+| vLLM | `openai` | `your-model` | Set `base_url: http://localhost:8000/v1` |
+
+Any OpenAI-compatible API works by setting `provider: openai` with a custom `base_url`.
+
+---
+
 ## Action Inputs
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `review_config` | Yes | `.github/review-config.yml` | Path to review config |
-| `openai_api_key` | Yes | — | OpenAI API key |
+| `provider` | No | `openai` | LLM provider (`openai`, `anthropic`, `gemini`) |
+| `api_key` | Yes | — | API key for the configured LLM provider |
+| `base_url` | No | — | Custom API base URL for OpenAI-compatible providers |
+| `model` | No | `gpt-4o` | Model name (provider-specific) |
 | `github_token` | Yes | — | GitHub token with repo permissions |
 | `database_url` | No | — | Read-only database URL |
 | `auto_fix` | No | `true` | Enable auto-fix for trivial issues |
 | `auto_merge` | No | `true` | Merge the PR after a passing review (only when auto-merge is enabled on the PR) |
-| `model` | No | `gpt-5.2-codex` | OpenAI model to use |
 
 ---
 
@@ -395,7 +416,7 @@ When adding PR Reviewer to a new project:
 
 - [ ] Create a GitHub App with `Contents: write` and `Pull requests: write` permissions
 - [ ] Add `APP_ID` and `APP_PRIVATE_KEY` as repo secrets
-- [ ] Add `OPENAI_API_KEY` as a GitHub repo secret
+- [ ] Add `LLM_API_KEY` as a GitHub repo secret (for your chosen provider)
 - [ ] Create `.github/workflows/pr-review.yml` (copy from Quick Setup above)
 - [ ] Create `.github/review-config.yml` (use a Config Example as starting point)
 - [ ] Set up a ruleset on `main` (require `pr-review` status check, 0 required approvals)

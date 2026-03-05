@@ -4,6 +4,7 @@ import { readFile } from 'fs/promises';
 import { parse as parseYaml } from 'yaml';
 import { GitHubClient } from './github.js';
 import { Reviewer } from './reviewer.js';
+import { createProvider, ProviderName } from './llm/index.js';
 import { ReviewConfig, ExcludePath, PRFile } from './types.js';
 import { isAutoFixCommit, autoFixSuggestions } from './auto-fixer.js';
 
@@ -49,7 +50,9 @@ function filterExcludedFiles(
 
 async function run(): Promise<void> {
   try {
-    const openaiApiKey = core.getInput('openai_api_key', { required: true });
+    const apiKey = core.getInput('api_key', { required: true });
+    const providerName = (core.getInput('provider') || 'openai') as ProviderName;
+    const baseUrl = core.getInput('base_url') || undefined;
     const githubToken = core.getInput('github_token', { required: true });
     const configPath = core.getInput('review_config', { required: true });
     const autoFixEnabled = core.getInput('auto_fix') !== 'false';
@@ -67,8 +70,9 @@ async function run(): Promise<void> {
     const configContent = await readFile(configPath, 'utf-8');
     const config: ReviewConfig = parseYaml(configContent);
 
+    const provider = createProvider({ provider: providerName, apiKey, model, baseUrl });
     const ghClient = new GitHubClient(githubToken);
-    const reviewer = new Reviewer(openaiApiKey, config, model);
+    const reviewer = new Reviewer(provider, config);
 
     await ghClient.ensureLabelsExist();
 
@@ -124,7 +128,7 @@ async function run(): Promise<void> {
 
       if (autoFixEnabled && !isAutoFix && suggestions.length > 0) {
         core.info(`Attempting auto-fix for ${suggestions.length} suggestions...`);
-        const pushed = await autoFixSuggestions(openaiApiKey, model, suggestions, githubToken);
+        const pushed = await autoFixSuggestions(provider, suggestions, githubToken);
         if (pushed) {
           core.info('Auto-fix commit pushed — this will trigger a re-review');
           await ghClient.setCommitStatus(

@@ -3,7 +3,7 @@ import * as github from '@actions/github';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { readFile, writeFile } from 'fs/promises';
-import OpenAI from 'openai';
+import { LLMProvider } from './llm/index.js';
 import { ReviewFinding } from './types.js';
 
 const execAsync = promisify(exec);
@@ -15,8 +15,7 @@ export function isAutoFixCommit(commitMessage: string): boolean {
 }
 
 export async function autoFixSuggestions(
-  apiKey: string,
-  model: string,
+  provider: LLMProvider,
   suggestions: ReviewFinding[],
   token: string
 ): Promise<boolean> {
@@ -37,7 +36,6 @@ export async function autoFixSuggestions(
     return false;
   }
 
-  const client = new OpenAI({ apiKey });
   let filesChanged = 0;
 
   const MAX_FILE_LINES = 200;
@@ -62,14 +60,12 @@ export async function autoFixSuggestions(
         )
         .join('\n');
 
-      const response = await client.responses.create({
-        model,
-        instructions:
+      const fixedContent = await provider.generateText({
+        systemPrompt:
           'You are a code fixer. Apply ONLY the requested fixes to the file content. Return ONLY the complete fixed file content with no explanation, no markdown fences, no commentary. Do NOT add comments, do NOT remove any code that is not part of the fix, do NOT restructure or reformat the file. The output must have the same number of lines (plus or minus a few for the fix itself).',
-        input: `Apply these fixes to the file:\n\n${fixDescriptions}\n\nOriginal file content (${originalLines} lines — your output must preserve all of them):\n\n${originalContent}`,
+        userMessage: `Apply these fixes to the file:\n\n${fixDescriptions}\n\nOriginal file content (${originalLines} lines — your output must preserve all of them):\n\n${originalContent}`,
       });
 
-      const fixedContent = response.output_text;
       if (!fixedContent) continue;
 
       let cleanContent = fixedContent;
